@@ -6,45 +6,53 @@ interface Props {
   onClick: () => void
 }
 
+// Compact card designed for a 2-column grid. Image on top fills card width,
+// then name (2 lines max), price row, store badge.
 export function DealCard({ deal, isNew, onClick }: Props) {
-  // Only show strikethrough + discount badge when we actually have a higher
-  // original price (otherwise it's misleading "0% off" noise).
   const hasRealDiscount = deal.discountPct > 0 && deal.originalPrice > deal.currentPrice
+  const storeBg = deal.store === 'amazon' ? 'bg-orange-500' : 'bg-yellow-400'
+  const storeName = deal.store === 'amazon' ? 'Amazon' : 'Noon'
 
   return (
     <button
       onClick={onClick}
-      className="w-full text-left bg-slate-800 rounded-2xl p-4 flex gap-3 items-start active:scale-95 transition-transform"
+      className="w-full text-left bg-slate-800 rounded-2xl overflow-hidden flex flex-col active:scale-[0.97] transition-transform"
     >
-      <div className="w-14 h-14 flex-shrink-0 bg-slate-700 rounded-xl flex items-center justify-center overflow-hidden">
+      {/* Image with overlay badges */}
+      <div className="relative aspect-square bg-slate-700 flex items-center justify-center">
         {deal.imageUrl
           ? <img src={deal.imageUrl} alt={deal.name} className="w-full h-full object-cover" />
-          : <span className="text-2xl">📦</span>}
-      </div>
+          : <span className="text-4xl">📦</span>}
 
-      <div className="flex-1 min-w-0">
-        <div className="flex items-start justify-between gap-2 mb-1">
-          <p className="text-sm font-semibold text-slate-100 line-clamp-2 leading-tight">{deal.name}</p>
-          <div className="flex flex-col items-end gap-1 flex-shrink-0">
-            {isNew && <span className="text-[10px] bg-blue-600 text-white px-1.5 py-0.5 rounded-full font-bold">NEW</span>}
-            {hasRealDiscount && (
-              <span className="text-[10px] bg-green-700 text-white px-1.5 py-0.5 rounded-full font-bold">
-                -{deal.discountPct}%
-              </span>
-            )}
-          </div>
+        {/* Top-right badges: NEW / discount */}
+        <div className="absolute top-1.5 right-1.5 flex flex-col items-end gap-1">
+          {isNew && <span className="text-[9px] bg-blue-600 text-white px-1.5 py-0.5 rounded-full font-bold leading-none">NEW</span>}
+          {hasRealDiscount && (
+            <span className="text-[9px] bg-green-600 text-white px-1.5 py-0.5 rounded-full font-bold leading-none">
+              -{deal.discountPct}%
+            </span>
+          )}
         </div>
 
-        <p className="text-[10px] text-slate-500 mb-2">
-          {deal.store === 'amazon' ? '🟠 Amazon.eg' : '🟡 Noon.eg'}
-        </p>
+        {/* Top-left store dot */}
+        <span
+          className={`absolute top-1.5 left-1.5 w-5 h-5 rounded-full ${storeBg} text-black text-[8px] font-black flex items-center justify-center leading-none`}
+          title={`${storeName}.eg`}
+        >
+          {storeName[0]}
+        </span>
+      </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-green-400 font-bold text-base">EGP {deal.currentPrice}</span>
+      {/* Text section */}
+      <div className="p-2.5 flex flex-col gap-1.5 flex-1">
+        <p className="text-[12px] font-medium text-slate-100 line-clamp-2 leading-tight min-h-[2.4em]">
+          {deal.name}
+        </p>
+        <div className="flex items-baseline gap-1.5 flex-wrap mt-auto">
+          <span className="text-green-400 font-bold text-sm leading-none">EGP {deal.currentPrice}</span>
           {hasRealDiscount && (
-            <span className="text-slate-500 text-xs line-through">EGP {deal.originalPrice}</span>
+            <span className="text-slate-500 text-[10px] line-through leading-none">EGP {deal.originalPrice}</span>
           )}
-          <span className="ml-auto text-[10px] text-green-600 font-semibold">🎉 ATL</span>
         </div>
       </div>
     </button>

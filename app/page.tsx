@@ -7,6 +7,10 @@ import { registerPush } from '@/lib/push'
 import type { Deal, DealsSnapshot } from '@/lib/types'
 
 const SEEN_KEY = 'deals_seen_ids'
+const FILTERS_KEY = 'deals_filters_v1'
+
+type SortKey = 'priceAsc' | 'priceDesc' | 'discount' | 'newest'
+type SavedFilters = { store: StoreTab; category: CategoryTab; sortBy: SortKey }
 
 function timeAgo(ts: number) {
   const mins = Math.floor((Date.now() - ts) / 60000)
@@ -15,17 +19,39 @@ function timeAgo(ts: number) {
   return `${Math.floor(mins / 60)}h ago`
 }
 
+// Read a filter value from localStorage, falling back to the default.
+// Safe to call on the server (returns default during prerender).
+function loadFilter<K extends keyof SavedFilters>(key: K, fallback: SavedFilters[K]): SavedFilters[K] {
+  if (typeof window === 'undefined') return fallback
+  try {
+    const raw = localStorage.getItem(FILTERS_KEY)
+    if (!raw) return fallback
+    const parsed = JSON.parse(raw) as Partial<SavedFilters>
+    return (parsed[key] ?? fallback) as SavedFilters[K]
+  } catch { return fallback }
+}
+
 export default function FeedPage() {
   const router = useRouter()
   const [snapshot, setSnapshot] = useState<DealsSnapshot | null>(null)
-  const [store, setStore] = useState<StoreTab>('All')
-  const [category, setCategory] = useState<CategoryTab>('All')
+  // Lazy-init from localStorage so filters persist across reloads / PWA relaunch.
+  // Note: initial render is server-side (well, client during PWA, but Next prerenders),
+  // so the initializer must check for window.
+  const [store, setStore] = useState<StoreTab>(() => loadFilter('store', 'All'))
+  const [category, setCategory] = useState<CategoryTab>(() => loadFilter('category', 'All'))
   const [search, setSearch] = useState('')
-  const [sortBy, setSortBy] = useState<'priceAsc' | 'priceDesc' | 'discount' | 'newest'>('priceAsc')
+  const [sortBy, setSortBy] = useState<SortKey>(() => loadFilter('sortBy', 'priceAsc'))
   const [seenIds, setSeenIds] = useState<Set<string>>(new Set())
   const [refreshing, setRefreshing] = useState(false)
   const touchStartY = useRef(0)
   const pulling = useRef(false)
+
+  // Persist filters whenever they change so they survive reloads / PWA relaunch.
+  useEffect(() => {
+    try {
+      localStorage.setItem(FILTERS_KEY, JSON.stringify({ store, category, sortBy }))
+    } catch { /* localStorage full or disabled — silently skip */ }
+  }, [store, category, sortBy])
 
   useEffect(() => {
     const saved = localStorage.getItem(SEEN_KEY)
@@ -179,20 +205,24 @@ export default function FeedPage() {
         />
       </div>
 
-      <div className="flex flex-col gap-3 mt-4">
-        {filtered.length === 0 && (
-          <div className="text-center text-slate-500 py-16">
-            <p className="text-4xl mb-3">🔍</p>
-            <p className="text-sm">
-              {deals.length === 0 ? 'No all-time lows found yet' : 'No deals match your filters'}
-            </p>
-            <p className="text-xs text-slate-600 mt-1">
-              {deals.length === 0
-                ? 'Scraper checks every hour — pull down to refresh now'
-                : 'Try clearing the search or picking a different category'}
-            </p>
-          </div>
-        )}
+      {filtered.length === 0 && (
+        <div className="text-center text-slate-500 py-16">
+          <p className="text-4xl mb-3">🔍</p>
+          <p className="text-sm">
+            {deals.length === 0 ? 'No all-time lows found yet' : 'No deals match your filters'}
+          </p>
+          <p className="text-xs text-slate-600 mt-1">
+            {deals.length === 0
+              ? 'Scraper checks every hour — pull down to refresh now'
+              : 'Try clearing the search or picking a different category'}
+          </p>
+        </div>
+      )}
+      {/*
+        Two-column grid on every screen so the user can scan more deals at once.
+        Each card is compact (smaller image, tighter padding).
+      */}
+      <div className="grid grid-cols-2 gap-2 mt-3">
         {filtered.map((deal: Deal) => (
           <DealCard
             key={deal.id}
