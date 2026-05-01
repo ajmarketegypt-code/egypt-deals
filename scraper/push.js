@@ -1,11 +1,11 @@
 import webpush from 'web-push'
 import 'dotenv/config'
 
-webpush.setVapidDetails(
-  process.env.VAPID_EMAIL,
-  process.env.VAPID_PUBLIC_KEY,
-  process.env.VAPID_PRIVATE_KEY
-)
+const vapidEmail = process.env.VAPID_EMAIL?.startsWith('mailto:') || process.env.VAPID_EMAIL?.startsWith('https:')
+  ? process.env.VAPID_EMAIL
+  : `mailto:${process.env.VAPID_EMAIL}`
+
+webpush.setVapidDetails(vapidEmail, process.env.VAPID_PUBLIC_KEY, process.env.VAPID_PRIVATE_KEY)
 
 export async function sendDealNotification(subscription, deal) {
   if (!subscription) {
@@ -13,7 +13,9 @@ export async function sendDealNotification(subscription, deal) {
     return
   }
 
-  const discountPct = Math.round((1 - deal.currentPrice / deal.originalPrice) * 100)
+  const discountPct = deal.originalPrice > 0
+    ? Math.round((1 - deal.currentPrice / deal.originalPrice) * 100)
+    : 0
   const storeName = deal.store === 'amazon' ? 'Amazon' : 'Noon'
 
   const payload = JSON.stringify({
@@ -27,7 +29,7 @@ export async function sendDealNotification(subscription, deal) {
     await webpush.sendNotification(subscription, payload)
     console.log(`[push] sent for ${deal.id}`)
   } catch (err) {
-    if (err.statusCode === 410) {
+    if (err.statusCode === 404 || err.statusCode === 410) {
       console.log('[push] subscription expired — user uninstalled PWA')
     } else {
       console.error('[push] error:', err.message)
