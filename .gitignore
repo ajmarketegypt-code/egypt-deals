@@ -1,0 +1,19 @@
+# Secrets
+scraper/.env
+.env.local
+
+# Node
+scraper/node_modules/
+node_modules/
+.next/
+
+# SQLite data
+scraper/data/*.db
+scraper/data/*.log
+
+# Build output
+.next/
+out/
+
+# Superpowers brainstorm
+.superpowers/
