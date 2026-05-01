@@ -1,65 +1,104 @@
-import Image from "next/image";
+'use client'
+import { useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { DealCard } from '@/components/DealCard'
+import { FilterTabs, type Tab } from '@/components/FilterTabs'
+import { registerPush } from '@/lib/push'
+import type { Deal, DealsSnapshot } from '@/lib/types'
 
-export default function Home() {
+const SEEN_KEY = 'deals_seen_ids'
+
+function timeAgo(ts: number) {
+  const mins = Math.floor((Date.now() - ts) / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  return `${Math.floor(mins / 60)}h ago`
+}
+
+export default function FeedPage() {
+  const router = useRouter()
+  const [snapshot, setSnapshot] = useState<DealsSnapshot | null>(null)
+  const [tab, setTab] = useState<Tab>('All')
+  const [seenIds, setSeenIds] = useState<Set<string>>(new Set())
+  const [refreshing, setRefreshing] = useState(false)
+  const touchStartY = useRef(0)
+
+  useEffect(() => {
+    const saved = localStorage.getItem(SEEN_KEY)
+    if (saved) setSeenIds(new Set(JSON.parse(saved)))
+    fetchDeals()
+    registerPush().catch(() => {})
+  }, [])
+
+  async function fetchDeals() {
+    const res = await fetch('/api/deals')
+    const data: DealsSnapshot = await res.json()
+    setSnapshot(data)
+    if (data.deals) {
+      localStorage.setItem(SEEN_KEY, JSON.stringify(data.deals.map((d: Deal) => d.id)))
+    }
+  }
+
+  async function handleRefresh() {
+    setRefreshing(true)
+    await fetch('/api/request-scrape', { method: 'POST' })
+    const before = snapshot?.updatedAt ?? 0
+    for (let i = 0; i < 18; i++) {
+      await new Promise(r => setTimeout(r, 5000))
+      const res = await fetch('/api/deals')
+      const data: DealsSnapshot = await res.json()
+      if (data.updatedAt > before) { setSnapshot(data); break }
+    }
+    setRefreshing(false)
+  }
+
+  const onTouchStart = (e: React.TouchEvent) => { touchStartY.current = e.touches[0].clientY }
+  const onTouchEnd = (e: React.TouchEvent) => {
+    if (e.changedTouches[0].clientY - touchStartY.current > 80 && window.scrollY === 0 && !refreshing) {
+      handleRefresh()
+    }
+  }
+
+  const deals = snapshot?.deals ?? []
+  const filtered = deals.filter((d: Deal) => {
+    if (tab === 'Amazon') return d.store === 'amazon'
+    if (tab === 'Noon') return d.store === 'noon'
+    if (tab === 'Daily') return ['household', 'food', 'health', 'baby'].includes(d.category)
+    return true
+  })
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="max-w-lg mx-auto px-4 pb-8 pt-safe" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      <div className="sticky top-0 bg-slate-900 pt-4 pb-2 z-10">
+        <div className="flex justify-between items-center mb-3">
+          <h1 className="text-xl font-bold">Egypt Deals</h1>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-slate-500">
+              {refreshing ? '⏳ Refreshing...' : snapshot?.updatedAt ? `Updated ${timeAgo(snapshot.updatedAt)}` : 'Loading...'}
+            </span>
+            <button onClick={() => router.push('/settings')} className="text-slate-400 text-lg">⚙️</button>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
-  );
+        <FilterTabs active={tab} onChange={setTab} />
+      </div>
+
+      <div className="flex flex-col gap-3 mt-4">
+        {filtered.length === 0 && (
+          <div className="text-center text-slate-500 py-16">
+            <p className="text-4xl mb-3">🔍</p>
+            <p className="text-sm">No all-time lows found yet</p>
+            <p className="text-xs text-slate-600 mt-1">Scraper checks every hour — pull down to refresh now</p>
+          </div>
+        )}
+        {filtered.map((deal: Deal) => (
+          <DealCard
+            key={deal.id}
+            deal={deal}
+            isNew={!seenIds.has(deal.id)}
+            onClick={() => router.push(`/deal/${deal.id}`)}
+          />
+        ))}
+      </div>
+    </main>
+  )
 }
