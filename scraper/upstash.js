@@ -11,6 +11,7 @@ export const KEYS = {
   DEALS_SNAPSHOT: 'deals_snapshot',
   SCRAPE_REQUESTED: 'scrape_requested',
   LAST_SCRAPE: 'last_scrape_ts',
+  NOTIFIED_DEAL_IDS: 'notified_deal_ids', // SET of deal IDs already notified
 }
 
 export async function getPushSubscription() {
@@ -31,4 +32,18 @@ export async function clearScrapeRequested() {
 
 export async function setLastScrapeTs() {
   return redis.set(KEYS.LAST_SCRAPE, Date.now())
+}
+
+// Notification de-duping: tracks which deal IDs have already triggered a push.
+// IDs roll off after 30 days so that re-listed items can re-notify.
+export async function getNotifiedDealIds() {
+  const ids = await redis.smembers(KEYS.NOTIFIED_DEAL_IDS)
+  return new Set(ids || [])
+}
+
+export async function addNotifiedDealIds(ids) {
+  if (!ids?.length) return
+  await redis.sadd(KEYS.NOTIFIED_DEAL_IDS, ...ids)
+  // Refresh TTL on every write so the set reflects the rolling 30-day window
+  await redis.expire(KEYS.NOTIFIED_DEAL_IDS, 60 * 60 * 24 * 30)
 }

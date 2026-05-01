@@ -3,8 +3,11 @@ import { initDb, upsertProduct, recordPrice, getMinPrice, getPriceCount, getPric
 import { isAllTimeLow, buildSmartVerdict } from './atl.js'
 import { scrapeAmazon } from './amazon.js'
 import { scrapeNoon } from './noon.js'
-import { sendDealNotification } from './push.js'
-import { getPushSubscription, setDealsSnapshot, setLastScrapeTs } from './upstash.js'
+import { sendDealNotification, sendDigestNotification } from './push.js'
+import {
+  getPushSubscription, setDealsSnapshot, setLastScrapeTs,
+  getNotifiedDealIds, addNotifiedDealIds,
+} from './upstash.js'
 
 const DB_PATH = './data/prices.db'
 
@@ -23,6 +26,7 @@ export async function runScrape() {
     }
 
     const subscription = await getPushSubscription()
+    const alreadyNotified = await getNotifiedDealIds()
     const atlDeals = []
 
     for (const deal of allDeals) {
@@ -52,13 +56,23 @@ export async function runScrape() {
         priceHistory: chartPrices,
         scrapedAt: Date.now(),
       })
+    }
 
-      if (subscription) {
-        try {
-          await sendDealNotification(subscription, { ...deal, discountPct })
-        } catch (err) {
-          console.error('[scraper] push failed (continuing):', err.message)
+    // Send AT MOST ONE notification per scrape, only for deals we've never notified about.
+    // - 0 new deals: no notification
+    // - 1 new deal:  send a single-deal notification (taps to that deal)
+    // - 2+ new deals: send a digest "X new ATL deals" (taps to home feed)
+    const newDeals = atlDeals.filter(d => !alreadyNotified.has(d.id))
+    if (subscription && newDeals.length > 0) {
+      try {
+        if (newDeals.length === 1) {
+          await sendDealNotification(subscription, newDeals[0])
+        } else {
+          await sendDigestNotification(subscription, newDeals)
         }
+        await addNotifiedDealIds(newDeals.map(d => d.id))
+      } catch (err) {
+        console.error('[scraper] push failed (continuing):', err.message)
       }
     }
 
@@ -66,7 +80,7 @@ export async function runScrape() {
     await setDealsSnapshot({ deals: top50, updatedAt: Date.now() })
     await setLastScrapeTs()
 
-    console.log(`[scraper] done — ${top50.length} ATL deals uploaded`)
+    console.log(`[scraper] done — ${top50.length} ATL deals uploaded, ${newDeals.length} new (notified)`)
   } finally {
     db.close()
   }
