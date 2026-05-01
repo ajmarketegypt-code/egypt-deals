@@ -41,15 +41,20 @@ export default function FeedPage() {
 
   async function handleRefresh() {
     setRefreshing(true)
-    await fetch('/api/request-scrape', { method: 'POST' })
-    const before = snapshot?.updatedAt ?? 0
-    for (let i = 0; i < 18; i++) {
-      await new Promise(r => setTimeout(r, 5000))
-      const res = await fetch('/api/deals')
-      const data: DealsSnapshot = await res.json()
-      if (data.updatedAt > before) { setSnapshot(data); break }
+    try {
+      await fetch('/api/request-scrape', { method: 'POST' })
+      const before = snapshot?.updatedAt ?? 0
+      for (let i = 0; i < 18; i++) {
+        await new Promise(r => setTimeout(r, 5000))
+        try {
+          const res = await fetch('/api/deals')
+          const data: DealsSnapshot = await res.json()
+          if (data.updatedAt > before) { setSnapshot(data); break }
+        } catch { /* network blip — try next iteration */ }
+      }
+    } finally {
+      setRefreshing(false)
     }
-    setRefreshing(false)
   }
 
   const onTouchStart = (e: React.TouchEvent) => { touchStartY.current = e.touches[0].clientY }

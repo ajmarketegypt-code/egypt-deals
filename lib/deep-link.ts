@@ -1,17 +1,14 @@
 import type { Deal } from './types'
 
 export function openDeal(deal: Deal) {
-  let appUrl: string
-
   if (deal.store === 'amazon') {
     const asin = deal.id.replace('amz-', '')
-    appUrl = `amazon://dp/${asin}`
+    // Try native app; iOS universal links handle the fallback automatically
+    window.location.href = `amazon://dp/${asin}`
+    // Open web page in new tab as fallback after 500ms
+    setTimeout(() => window.open(deal.url, '_blank'), 500)
   } else {
-    appUrl = `noon://${deal.url.replace('https://www.noon.com', '')}`
+    // Open web URL directly — Noon iOS universal links handle app redirect
+    window.open(deal.url, '_blank')
   }
-
-  // Attempt to open native app; fall back to website after 500ms
-  const fallback = setTimeout(() => { window.location.href = deal.url }, 500)
-  window.addEventListener('blur', () => clearTimeout(fallback), { once: true })
-  window.location.href = appUrl
 }

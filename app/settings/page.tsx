@@ -20,7 +20,7 @@ export default function SettingsPage() {
   const [requesting, setRequesting] = useState(false)
 
   useEffect(() => {
-    if (typeof window !== 'undefined') setPushEnabled(Notification.permission === 'granted')
+    if (typeof window !== 'undefined' && 'Notification' in window) setPushEnabled(Notification.permission === 'granted')
     fetch('/api/deals').then(r => r.json()).then((data: DealsSnapshot) => {
       setLastScrape(data.updatedAt ?? null)
       setTotalDeals(data.deals?.length ?? 0)
