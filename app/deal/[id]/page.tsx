@@ -25,7 +25,15 @@ export default function DealDetailPage() {
 
   return (
     <main className="max-w-lg mx-auto px-4 pb-8">
-      <button onClick={() => router.back()} className="mt-4 text-slate-400 text-sm">← Back</button>
+      <button
+        onClick={() => {
+          // In PWA standalone mode, history may be empty if launched directly here.
+          // Fall back to explicit home navigation so the button always works.
+          if (window.history.length > 1) router.back()
+          else router.push('/')
+        }}
+        className="mt-4 text-slate-400 text-sm py-2 -mx-2 px-2 active:opacity-60"
+      >← Back</button>
 
       <div className="flex gap-4 mt-4">
         <div className="w-20 h-20 flex-shrink-0 bg-slate-800 rounded-2xl flex items-center justify-center overflow-hidden">

@@ -32,17 +32,29 @@ export default function FeedPage() {
     fetchDeals()
     registerPush().catch(() => {})
 
+    // PWA standalone mode: window.scrollY may stay 0 (the document doesn't scroll
+    // — a child element does). Use document.scrollingElement.scrollTop OR
+    // window.scrollY; whichever is bigger tells us if we're at the top.
+    const isAtTop = () => {
+      const a = window.scrollY || 0
+      const b = document.scrollingElement?.scrollTop || 0
+      return Math.max(a, b) < 2
+    }
+
     function onStart(e: TouchEvent) {
       touchStartY.current = e.touches[0].clientY
-      pulling.current = false
+      pulling.current = isAtTop()
     }
     function onMove(e: TouchEvent) {
-      if (window.scrollY === 0 && e.touches[0].clientY - touchStartY.current > 10)
-        pulling.current = true
+      if (!pulling.current) return
+      const delta = e.touches[0].clientY - touchStartY.current
+      // Only stay in pulling state while user keeps moving down from top
+      if (delta < -5 || !isAtTop()) pulling.current = false
     }
     function onEnd(e: TouchEvent) {
+      if (!pulling.current) return
       const delta = e.changedTouches[0].clientY - touchStartY.current
-      if (pulling.current && delta > 80 && window.scrollY === 0) handleRefresh()
+      if (delta > 70) handleRefresh()
       pulling.current = false
     }
 
@@ -100,11 +112,21 @@ export default function FeedPage() {
       <div className="sticky top-0 bg-slate-900 pt-4 pb-2 z-10">
         <div className="flex justify-between items-center mb-3">
           <h1 className="text-xl font-bold">Egypt Deals</h1>
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-500">
-              {refreshing ? '⏳ Refreshing...' : snapshot?.updatedAt ? `Updated ${timeAgo(snapshot.updatedAt)}` : 'Loading...'}
-            </span>
-            <button onClick={() => router.push('/settings')} className="text-slate-400 text-lg">⚙️</button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="flex items-center gap-1.5 text-xs text-slate-400 px-2 py-1.5 rounded-full bg-slate-800 active:opacity-60 disabled:opacity-50"
+              aria-label="Refresh deals"
+            >
+              <span className={refreshing ? 'inline-block animate-spin' : ''}>{refreshing ? '⏳' : '↻'}</span>
+              <span>{refreshing ? 'Refreshing' : snapshot?.updatedAt ? timeAgo(snapshot.updatedAt) : 'Loading'}</span>
+            </button>
+            <button
+              onClick={() => router.push('/settings')}
+              className="text-slate-400 text-lg w-9 h-9 flex items-center justify-center rounded-full active:bg-slate-800"
+              aria-label="Settings"
+            >⚙️</button>
           </div>
         </div>
 

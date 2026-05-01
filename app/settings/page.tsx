@@ -45,7 +45,11 @@ export default function SettingsPage() {
   return (
     <main className="max-w-lg mx-auto px-4 pb-8">
       <div className="flex items-center gap-3 mt-4 mb-6">
-        <button onClick={() => router.back()} className="text-slate-400 text-sm">←</button>
+        <button
+          onClick={() => { if (window.history.length > 1) router.back(); else router.push('/') }}
+          className="text-slate-400 text-base py-2 px-2 -mx-2 active:opacity-60"
+          aria-label="Back"
+        >←</button>
         <h1 className="text-xl font-bold">Settings</h1>
       </div>
 
