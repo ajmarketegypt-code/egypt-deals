@@ -21,6 +21,7 @@ export default function FeedPage() {
   const [store, setStore] = useState<StoreTab>('All')
   const [category, setCategory] = useState<CategoryTab>('All')
   const [search, setSearch] = useState('')
+  const [sortBy, setSortBy] = useState<'priceAsc' | 'priceDesc' | 'discount' | 'newest'>('priceAsc')
   const [seenIds, setSeenIds] = useState<Set<string>>(new Set())
   const [refreshing, setRefreshing] = useState(false)
   const touchStartY = useRef(0)
@@ -98,14 +99,21 @@ export default function FeedPage() {
   const deals = snapshot?.deals ?? []
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return deals.filter((d: Deal) => {
+    const matched = deals.filter((d: Deal) => {
       if (store === 'Amazon' && d.store !== 'amazon') return false
       if (store === 'Noon' && d.store !== 'noon') return false
       if (category !== 'All' && d.category !== category) return false
       if (q && !d.name.toLowerCase().includes(q)) return false
       return true
     })
-  }, [deals, store, category, search])
+    // Apply sort — return a NEW array so React re-renders and we don't mutate snapshot
+    const sorted = [...matched]
+    if (sortBy === 'priceAsc')   sorted.sort((a, b) => a.currentPrice - b.currentPrice)
+    if (sortBy === 'priceDesc')  sorted.sort((a, b) => b.currentPrice - a.currentPrice)
+    if (sortBy === 'discount')   sorted.sort((a, b) => b.discountPct - a.discountPct)
+    if (sortBy === 'newest')     sorted.sort((a, b) => (b.scrapedAt || 0) - (a.scrapedAt || 0))
+    return sorted
+  }, [deals, store, category, search, sortBy])
 
   return (
     <main className="max-w-lg mx-auto px-4 pb-8 pt-safe">
@@ -130,23 +138,37 @@ export default function FeedPage() {
           </div>
         </div>
 
-        <div className="relative mb-2">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">🔍</span>
-          <input
-            type="text"
-            inputMode="search"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search products..."
-            className="w-full bg-slate-800 text-slate-100 placeholder-slate-500 rounded-full pl-9 pr-9 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
-          />
-          {search && (
-            <button
-              onClick={() => setSearch('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 text-sm w-6 h-6 rounded-full hover:bg-slate-700"
-              aria-label="Clear search"
-            >×</button>
-          )}
+        <div className="flex gap-2 mb-2">
+          <div className="relative flex-1">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">🔍</span>
+            <input
+              type="text"
+              inputMode="search"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search products..."
+              className="w-full bg-slate-800 text-slate-100 placeholder-slate-500 rounded-full pl-9 pr-9 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 text-sm w-6 h-6 rounded-full hover:bg-slate-700"
+                aria-label="Clear search"
+              >×</button>
+            )}
+          </div>
+          <select
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value as typeof sortBy)}
+            className="bg-slate-800 text-slate-100 text-xs rounded-full px-3 pr-7 py-2 focus:outline-none focus:ring-2 focus:ring-blue-600 appearance-none bg-no-repeat bg-right"
+            style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 12 12\'%3E%3Cpath fill=\'%2364748b\' d=\'M2 4l4 4 4-4z\'/%3E%3C/svg%3E")', backgroundPosition: 'right 0.5rem center', backgroundSize: '12px' }}
+            aria-label="Sort deals"
+          >
+            <option value="priceAsc">Cheapest</option>
+            <option value="priceDesc">Most expensive</option>
+            <option value="discount">Best discount</option>
+            <option value="newest">Newest</option>
+          </select>
         </div>
 
         <FilterTabs

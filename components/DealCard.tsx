@@ -7,6 +7,10 @@ interface Props {
 }
 
 export function DealCard({ deal, isNew, onClick }: Props) {
+  // Only show strikethrough + discount badge when we actually have a higher
+  // original price (otherwise it's misleading "0% off" noise).
+  const hasRealDiscount = deal.discountPct > 0 && deal.originalPrice > deal.currentPrice
+
   return (
     <button
       onClick={onClick}
@@ -23,7 +27,11 @@ export function DealCard({ deal, isNew, onClick }: Props) {
           <p className="text-sm font-semibold text-slate-100 line-clamp-2 leading-tight">{deal.name}</p>
           <div className="flex flex-col items-end gap-1 flex-shrink-0">
             {isNew && <span className="text-[10px] bg-blue-600 text-white px-1.5 py-0.5 rounded-full font-bold">NEW</span>}
-            <span className="text-[10px] bg-green-700 text-white px-1.5 py-0.5 rounded-full font-bold">-{deal.discountPct}%</span>
+            {hasRealDiscount && (
+              <span className="text-[10px] bg-green-700 text-white px-1.5 py-0.5 rounded-full font-bold">
+                -{deal.discountPct}%
+              </span>
+            )}
           </div>
         </div>
 
@@ -33,8 +41,10 @@ export function DealCard({ deal, isNew, onClick }: Props) {
 
         <div className="flex items-center gap-2">
           <span className="text-green-400 font-bold text-base">EGP {deal.currentPrice}</span>
-          <span className="text-slate-500 text-xs line-through">EGP {deal.originalPrice}</span>
-          <span className="ml-auto text-[10px] text-green-600 font-semibold">🎉 ALL-TIME LOW</span>
+          {hasRealDiscount && (
+            <span className="text-slate-500 text-xs line-through">EGP {deal.originalPrice}</span>
+          )}
+          <span className="ml-auto text-[10px] text-green-600 font-semibold">🎉 ATL</span>
         </div>
       </div>
     </button>
