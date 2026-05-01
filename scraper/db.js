@@ -68,6 +68,16 @@ export function getAvgPrice(db, productId) {
   return row?.avg ?? null
 }
 
+export function getMaxPrice(db, productId) {
+  const row = db.prepare('SELECT MAX(price) as max FROM price_history WHERE productId = ?').get(productId)
+  return row?.max ?? null
+}
+
+export function getFirstSeenTs(db, productId) {
+  const row = db.prepare('SELECT MIN(scrapedAt) as ts FROM price_history WHERE productId = ?').get(productId)
+  return row?.ts ?? null
+}
+
 export function getSecondLowestPrice(db, productId) {
   const rows = db.prepare(`
     SELECT DISTINCT price FROM price_history WHERE productId = ? ORDER BY price ASC LIMIT 2

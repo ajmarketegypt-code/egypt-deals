@@ -9,8 +9,11 @@ export interface Deal {
   originalPrice: number
   discountPct: number
   minPrice: number
+  maxPrice: number
   prevLow: number
   avgPrice: number
+  priceCount: number    // how many data points we've collected for this product
+  firstSeenTs: number   // unix ms — when we first recorded this product
   verdict: string
   priceHistory: number[]
   scrapedAt: number

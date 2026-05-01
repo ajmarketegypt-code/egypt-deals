@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import { initDb, upsertProduct, recordPrice, getMinPrice, getPriceCount, getPriceHistory, getAvgPrice, getSecondLowestPrice } from './db.js'
+import { initDb, upsertProduct, recordPrice, getMinPrice, getPriceCount, getPriceHistory, getAvgPrice, getSecondLowestPrice, getMaxPrice, getFirstSeenTs } from './db.js'
 import { isAllTimeLow, buildSmartVerdict } from './atl.js'
 import { scrapeAmazon } from './amazon.js'
 import { scrapeNoon } from './noon.js'
@@ -40,6 +40,8 @@ export async function runScrape() {
       const chartPrices = history.slice(-30).map(h => h.price) // up to 30 points for the chart
       const prevLow = getSecondLowestPrice(db, deal.id) ?? deal.currentPrice
       const avgPrice = getAvgPrice(db, deal.id)
+      const maxPrice = getMaxPrice(db, deal.id) ?? deal.currentPrice
+      const firstSeenTs = getFirstSeenTs(db, deal.id) // unix seconds
       const discountPct = deal.originalPrice > 0
         ? Math.round((1 - deal.currentPrice / deal.originalPrice) * 100)
         : 0
@@ -49,8 +51,11 @@ export async function runScrape() {
       atlDeals.push({
         ...deal,
         minPrice,
+        maxPrice: Math.round(maxPrice),
         prevLow,
         avgPrice: Math.round(avgPrice ?? 0),
+        priceCount,
+        firstSeenTs: firstSeenTs ? firstSeenTs * 1000 : Date.now(), // ms
         discountPct,
         verdict,
         priceHistory: chartPrices,
