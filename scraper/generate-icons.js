@@ -72,4 +72,9 @@ for (const size of sizes) {
   const outPath = path.join(outDir, `icon-${size}.png`)
   await render(svg, outPath, size)
 }
+
+// apple-touch-icon.png at public root (180×180) — iOS convention
+const applePath = path.join(__dirname, '..', 'public', 'apple-touch-icon.png')
+await render(makeSVG(180), applePath, 180)
+
 console.log('[icons] done')

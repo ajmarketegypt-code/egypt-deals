@@ -1,5 +1,5 @@
 export function isAllTimeLow({ currentPrice, minPrice, priceCount }) {
-  if (priceCount < 3) return false
+  if (priceCount < 1) return false
   return currentPrice <= minPrice
 }
 

@@ -34,30 +34,19 @@ export async function scrapeAmazon() {
     await page.goto(DEALS_URL, { waitUntil: 'domcontentloaded', timeout: 45000 })
     await page.waitForTimeout(2000)
 
-    // scroll to load lazy cards
     for (let i = 0; i < 6; i++) {
       await page.evaluate(() => window.scrollBy(0, window.innerHeight))
       await page.waitForTimeout(600)
     }
 
-    // Save debug snapshot on first run if empty
     const html = await page.content()
-    const debugPath = path.join(__dirname, 'data', 'amazon-debug.html')
     fs.mkdirSync(path.join(__dirname, 'data'), { recursive: true })
-    fs.writeFileSync(debugPath, html)
+    fs.writeFileSync(path.join(__dirname, 'data', 'amazon-debug.html'), html)
 
     const deals = await page.evaluate(() => {
-      // Primary selector confirmed from debug HTML inspection
       let cards = [...document.querySelectorAll('[data-testid="product-card"]')]
-
-      // Fallback selectors if primary fails
       if (cards.length === 0) {
-        const fallbacks = [
-          '[data-asin]:not([data-asin=""])',
-          '[data-component-type="s-search-result"]',
-          '.s-result-item[data-asin]',
-        ]
-        for (const sel of fallbacks) {
+        for (const sel of ['[data-asin]:not([data-asin=""])', '.s-result-item[data-asin]']) {
           const found = [...document.querySelectorAll(sel)]
           if (found.length > 0) { cards = found; break }
         }
@@ -66,39 +55,48 @@ export async function scrapeAmazon() {
       const results = []
       cards.forEach(card => {
         try {
-          const asin = card.getAttribute('data-asin') || card.id?.match(/[A-Z0-9]{10}/)?.[0]
+          const asin = card.getAttribute('data-asin')
           if (!asin || asin.length !== 10) return
 
-          // Title: ProductCard-module__title_ confirmed from debug HTML
-          const nameEl = card.querySelector('[class*="title_"], [data-testid="title"], h2 a span, .a-text-normal')
-          const name = nameEl?.textContent?.trim()
+          // Name: full text in the offscreen truncate span (avoids "Limited time deal" badge)
+          let name = ''
+          for (const el of card.querySelectorAll('.a-truncate-full, .a-truncate-cut')) {
+            const t = el.textContent?.trim() || ''
+            if (t.length > 10 && !t.toLowerCase().includes('deals from') && !t.toLowerCase().includes('limited time')) {
+              name = t
+              break
+            }
+          }
           if (!name || name.length < 3) return
 
-          // Price: .a-price-whole confirmed (30 elements found in debug)
-          const priceWhole = card.querySelector('.a-price-whole')
-          const priceFrac  = card.querySelector('.a-price-fraction')
-          let currentPrice = NaN
-          if (priceWhole) {
-            const whole = priceWhole.textContent.replace(/[^0-9]/g, '')
-            const frac  = priceFrac?.textContent.replace(/[^0-9]/g, '') || '0'
-            currentPrice = parseFloat(`${whole}.${frac}`)
+          // Prices from offscreen accessibility spans: "Deal Price: EGP 286.20" / "Was: EGP 318.00"
+          let currentPrice = NaN, originalPrice = NaN
+          for (const s of card.querySelectorAll('span.a-offscreen')) {
+            const t = s.textContent?.trim() || ''
+            if (t.startsWith('Deal Price:') || t.startsWith('Now:')) {
+              currentPrice = parseFloat(t.replace(/[^0-9.]/g, ''))
+            } else if (t.startsWith('Was:')) {
+              originalPrice = parseFloat(t.replace(/[^0-9.]/g, ''))
+            }
           }
-          if (isNaN(currentPrice)) return
 
-          // Original/was price
-          const origEl = card.querySelector('.a-text-price .a-offscreen, [data-testid="was-price"] .a-offscreen, .a-price.a-text-price .a-offscreen')
-          const originalPrice = origEl
-            ? parseFloat(origEl.textContent.replace(/[^0-9.]/g, ''))
-            : currentPrice
+          // Fallback: .a-price-whole + .a-price-fraction
+          if (isNaN(currentPrice)) {
+            const priceWhole = card.querySelector('.a-price-whole')
+            const priceFrac  = card.querySelector('.a-price-fraction')
+            if (priceWhole) {
+              const whole = priceWhole.textContent.replace(/[^0-9]/g, '')
+              const frac  = priceFrac?.textContent.replace(/[^0-9]/g, '') || '0'
+              currentPrice = parseFloat(`${whole}.${frac}`)
+            }
+          }
+          if (isNaN(currentPrice) || currentPrice === 0) return
+          if (isNaN(originalPrice) || originalPrice <= 0) originalPrice = currentPrice
 
           const imageEl = card.querySelector('img[src]')
-          // Link: data-testid="product-card-link" confirmed from debug HTML
-          const linkEl  = card.querySelector('[data-testid="product-card-link"], a[href*="/dp/"], a[href]')
+          const linkEl  = card.querySelector('[data-testid="product-card-link"], a[href*="/dp/"]')
           const href = linkEl?.getAttribute('href') || ''
           const url  = href.startsWith('http') ? href : `https://www.amazon.eg${href}`
-
-          const disc = originalPrice > 0 ? Math.round((1 - currentPrice / originalPrice) * 100) : 0
-          if (disc < 5 && originalPrice === currentPrice) return
 
           results.push({
             id: `amz-${asin}`,
