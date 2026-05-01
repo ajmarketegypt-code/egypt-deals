@@ -22,12 +22,36 @@ export default function FeedPage() {
   const [seenIds, setSeenIds] = useState<Set<string>>(new Set())
   const [refreshing, setRefreshing] = useState(false)
   const touchStartY = useRef(0)
+  const pulling = useRef(false)
 
   useEffect(() => {
     const saved = localStorage.getItem(SEEN_KEY)
     if (saved) setSeenIds(new Set(JSON.parse(saved)))
     fetchDeals()
     registerPush().catch(() => {})
+
+    function onStart(e: TouchEvent) {
+      touchStartY.current = e.touches[0].clientY
+      pulling.current = false
+    }
+    function onMove(e: TouchEvent) {
+      if (window.scrollY === 0 && e.touches[0].clientY - touchStartY.current > 10)
+        pulling.current = true
+    }
+    function onEnd(e: TouchEvent) {
+      const delta = e.changedTouches[0].clientY - touchStartY.current
+      if (pulling.current && delta > 80 && window.scrollY === 0) handleRefresh()
+      pulling.current = false
+    }
+
+    document.addEventListener('touchstart', onStart, { passive: true })
+    document.addEventListener('touchmove',  onMove,  { passive: true })
+    document.addEventListener('touchend',   onEnd,   { passive: true })
+    return () => {
+      document.removeEventListener('touchstart', onStart)
+      document.removeEventListener('touchmove',  onMove)
+      document.removeEventListener('touchend',   onEnd)
+    }
   }, [])
 
   async function fetchDeals() {
@@ -57,13 +81,6 @@ export default function FeedPage() {
     }
   }
 
-  const onTouchStart = (e: React.TouchEvent) => { touchStartY.current = e.touches[0].clientY }
-  const onTouchEnd = (e: React.TouchEvent) => {
-    if (e.changedTouches[0].clientY - touchStartY.current > 80 && window.scrollY === 0 && !refreshing) {
-      handleRefresh()
-    }
-  }
-
   const deals = snapshot?.deals ?? []
   const filtered = deals.filter((d: Deal) => {
     if (tab === 'Amazon') return d.store === 'amazon'
@@ -73,7 +90,7 @@ export default function FeedPage() {
   })
 
   return (
-    <main className="max-w-lg mx-auto px-4 pb-8 pt-safe" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+    <main className="max-w-lg mx-auto px-4 pb-8 pt-safe">
       <div className="sticky top-0 bg-slate-900 pt-4 pb-2 z-10">
         <div className="flex justify-between items-center mb-3">
           <h1 className="text-xl font-bold">Egypt Deals</h1>

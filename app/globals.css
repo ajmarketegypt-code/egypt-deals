@@ -23,6 +23,8 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  /* Prevent iOS native pull-to-refresh so our custom one works */
+  overscroll-behavior-y: none;
 }
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
