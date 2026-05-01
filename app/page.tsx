@@ -1,8 +1,8 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { DealCard } from '@/components/DealCard'
-import { FilterTabs, type Tab } from '@/components/FilterTabs'
+import { FilterTabs, type StoreTab, type CategoryTab } from '@/components/FilterTabs'
 import { registerPush } from '@/lib/push'
 import type { Deal, DealsSnapshot } from '@/lib/types'
 
@@ -18,7 +18,9 @@ function timeAgo(ts: number) {
 export default function FeedPage() {
   const router = useRouter()
   const [snapshot, setSnapshot] = useState<DealsSnapshot | null>(null)
-  const [tab, setTab] = useState<Tab>('All')
+  const [store, setStore] = useState<StoreTab>('All')
+  const [category, setCategory] = useState<CategoryTab>('All')
+  const [search, setSearch] = useState('')
   const [seenIds, setSeenIds] = useState<Set<string>>(new Set())
   const [refreshing, setRefreshing] = useState(false)
   const touchStartY = useRef(0)
@@ -82,12 +84,16 @@ export default function FeedPage() {
   }
 
   const deals = snapshot?.deals ?? []
-  const filtered = deals.filter((d: Deal) => {
-    if (tab === 'Amazon') return d.store === 'amazon'
-    if (tab === 'Noon') return d.store === 'noon'
-    if (tab === 'Daily') return ['household', 'food', 'health', 'baby'].includes(d.category)
-    return true
-  })
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return deals.filter((d: Deal) => {
+      if (store === 'Amazon' && d.store !== 'amazon') return false
+      if (store === 'Noon' && d.store !== 'noon') return false
+      if (category !== 'All' && d.category !== category) return false
+      if (q && !d.name.toLowerCase().includes(q)) return false
+      return true
+    })
+  }, [deals, store, category, search])
 
   return (
     <main className="max-w-lg mx-auto px-4 pb-8 pt-safe">
@@ -101,15 +107,46 @@ export default function FeedPage() {
             <button onClick={() => router.push('/settings')} className="text-slate-400 text-lg">⚙️</button>
           </div>
         </div>
-        <FilterTabs active={tab} onChange={setTab} />
+
+        <div className="relative mb-2">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">🔍</span>
+          <input
+            type="text"
+            inputMode="search"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search products..."
+            className="w-full bg-slate-800 text-slate-100 placeholder-slate-500 rounded-full pl-9 pr-9 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 text-sm w-6 h-6 rounded-full hover:bg-slate-700"
+              aria-label="Clear search"
+            >×</button>
+          )}
+        </div>
+
+        <FilterTabs
+          store={store}
+          category={category}
+          onStoreChange={setStore}
+          onCategoryChange={setCategory}
+        />
       </div>
 
       <div className="flex flex-col gap-3 mt-4">
         {filtered.length === 0 && (
           <div className="text-center text-slate-500 py-16">
             <p className="text-4xl mb-3">🔍</p>
-            <p className="text-sm">No all-time lows found yet</p>
-            <p className="text-xs text-slate-600 mt-1">Scraper checks every hour — pull down to refresh now</p>
+            <p className="text-sm">
+              {deals.length === 0 ? 'No all-time lows found yet' : 'No deals match your filters'}
+            </p>
+            <p className="text-xs text-slate-600 mt-1">
+              {deals.length === 0
+                ? 'Scraper checks every hour — pull down to refresh now'
+                : 'Try clearing the search or picking a different category'}
+            </p>
           </div>
         )}
         {filtered.map((deal: Deal) => (

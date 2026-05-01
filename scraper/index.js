@@ -32,14 +32,15 @@ export async function runScrape() {
       if (!isAllTimeLow({ currentPrice: deal.currentPrice, minPrice, priceCount })) continue
 
       const history = getPriceHistory(db, deal.id)
-      const recentPrices = history.slice(-4).map(h => h.price)
+      const trendPrices = history.slice(-4).map(h => h.price) // for verdict trend analysis
+      const chartPrices = history.slice(-30).map(h => h.price) // up to 30 points for the chart
       const prevLow = getSecondLowestPrice(db, deal.id) ?? deal.currentPrice
       const avgPrice = getAvgPrice(db, deal.id)
       const discountPct = deal.originalPrice > 0
         ? Math.round((1 - deal.currentPrice / deal.originalPrice) * 100)
         : 0
       const seenAtThisPrice = Math.max(0, history.filter(h => h.price === deal.currentPrice).length - 1)
-      const verdict = buildSmartVerdict({ currentPrice: deal.currentPrice, prevLow, recentPrices, seenAtThisPrice })
+      const verdict = buildSmartVerdict({ currentPrice: deal.currentPrice, prevLow, recentPrices: trendPrices, seenAtThisPrice })
 
       atlDeals.push({
         ...deal,
@@ -48,7 +49,7 @@ export async function runScrape() {
         avgPrice: Math.round(avgPrice ?? 0),
         discountPct,
         verdict,
-        priceHistory: recentPrices,
+        priceHistory: chartPrices,
         scrapedAt: Date.now(),
       })
 

@@ -2,6 +2,7 @@ import { chromium } from 'playwright'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { classify } from './classify.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DEALS_URL = 'https://www.amazon.eg/deals'
@@ -114,6 +115,9 @@ export async function scrapeAmazon() {
 
       return results
     })
+
+    // Classify by title (Pass 1, in-process — no extra requests)
+    for (const d of deals) d.category = classify(d.name)
 
     console.log(`[amazon] scraped ${deals.length} deals (page body: ${html.length} chars)`)
     return deals
