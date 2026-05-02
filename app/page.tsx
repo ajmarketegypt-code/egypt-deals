@@ -8,6 +8,8 @@ import type { Deal, DealsSnapshot } from '@/lib/types'
 
 const SEEN_KEY = 'deals_seen_ids'
 const FILTERS_KEY = 'deals_filters_v1'
+const SEARCH_HISTORY_KEY = 'deals_search_history_v1'
+const SEARCH_HISTORY_MAX = 5
 
 type SortKey = 'priceAsc' | 'priceDesc' | 'discount' | 'newest'
 type SavedFilters = { store: StoreTab; category: CategoryTab; sortBy: SortKey }
@@ -41,6 +43,7 @@ export default function FeedPage() {
   const [store, setStore] = useState<StoreTab>(() => loadFilter('store', 'All'))
   const [category, setCategory] = useState<CategoryTab>(() => loadFilter('category', 'All'))
   const [search, setSearch] = useState('')
+  const [searchHistory, setSearchHistory] = useState<string[]>([])
   const [sortBy, setSortBy] = useState<SortKey>(() => loadFilter('sortBy', 'priceAsc'))
   const [seenIds, setSeenIds] = useState<Set<string>>(new Set())
   const [refreshing, setRefreshing] = useState(false)
@@ -54,6 +57,35 @@ export default function FeedPage() {
       localStorage.setItem(FILTERS_KEY, JSON.stringify({ store, category, sortBy }))
     } catch { /* localStorage full or disabled — silently skip */ }
   }, [store, category, sortBy])
+
+  // Load search history once on mount. We don't lazy-init via useState because
+  // the chip row depends on this re-rendering after hydration anyway.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(SEARCH_HISTORY_KEY)
+      if (raw) setSearchHistory(JSON.parse(raw) as string[])
+    } catch { /* corrupted JSON — ignore */ }
+  }, [])
+
+  // Push a search term to history (MRU first, deduped, capped at MAX).
+  // Called on Enter, on blur with non-empty content, and on the clear-X tap.
+  function recordSearch(term: string) {
+    const t = term.trim()
+    if (!t) return
+    setSearchHistory(prev => {
+      const next = [t, ...prev.filter(x => x.toLowerCase() !== t.toLowerCase())].slice(0, SEARCH_HISTORY_MAX)
+      try { localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
+
+  function removeFromHistory(term: string) {
+    setSearchHistory(prev => {
+      const next = prev.filter(x => x !== term)
+      try { localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
 
   useEffect(() => {
     const saved = localStorage.getItem(SEEN_KEY)
@@ -197,12 +229,19 @@ export default function FeedPage() {
               inputMode="search"
               value={search}
               onChange={e => setSearch(e.target.value)}
+              onBlur={() => recordSearch(search)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  recordSearch(search)
+                  ;(e.target as HTMLInputElement).blur()
+                }
+              }}
               placeholder="Search products..."
               className="w-full bg-slate-800 text-slate-100 placeholder-slate-500 rounded-full pl-9 pr-9 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
             />
             {search && (
               <button
-                onClick={() => setSearch('')}
+                onClick={() => { recordSearch(search); setSearch('') }}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 text-sm w-6 h-6 rounded-full hover:bg-slate-700"
                 aria-label="Clear search"
               >×</button>
@@ -221,6 +260,30 @@ export default function FeedPage() {
             <option value="newest">Newest</option>
           </select>
         </div>
+
+        {/* Recent searches — MRU first, dismissible. Hidden when empty so the
+            row doesn't take up space on first launch. */}
+        {searchHistory.length > 0 && (
+          <div className="flex gap-1.5 mb-2 overflow-x-auto -mx-1 px-1 scrollbar-none" aria-label="Recent searches">
+            {searchHistory.map(term => (
+              <span
+                key={term}
+                className="flex-shrink-0 inline-flex items-center gap-1 bg-slate-800 text-slate-300 text-[11px] rounded-full pl-2.5 pr-1 py-0.5"
+              >
+                <button
+                  onClick={() => setSearch(term)}
+                  className="active:opacity-60"
+                  aria-label={`Search for ${term}`}
+                >{term}</button>
+                <button
+                  onClick={() => removeFromHistory(term)}
+                  className="text-slate-500 w-4 h-4 rounded-full hover:bg-slate-700 flex items-center justify-center"
+                  aria-label={`Remove ${term} from history`}
+                >×</button>
+              </span>
+            ))}
+          </div>
+        )}
 
         <FilterTabs
           store={store}
