@@ -1,5 +1,9 @@
+// We only want to flag a product as ATL when we have meaningful history.
+// `priceCount >= 5` ≈ 5 hourly samples, so the badge stops being noisy on
+// freshly-tracked items where every claim of "all-time low" is trivially true.
+// The feed is the ATL list — sparse for ~5h after a fresh DB is the trade-off.
 export function isAllTimeLow({ currentPrice, minPrice, priceCount }) {
-  if (priceCount < 1) return false
+  if (priceCount < 5) return false
   return currentPrice <= minPrice
 }
 
