@@ -8,8 +8,9 @@ function timeAgo(ts: number | null) {
   if (!ts) return 'Never'
   const mins = Math.floor((Date.now() - ts) / 60000)
   if (mins < 1) return 'Just now'
-  if (mins < 60) return `${mins} minutes ago`
-  return `${Math.floor(mins / 60)} hours ago`
+  if (mins < 60) return `${mins} ${mins === 1 ? 'minute' : 'minutes'} ago`
+  const hrs = Math.floor(mins / 60)
+  return `${hrs} ${hrs === 1 ? 'hour' : 'hours'} ago`
 }
 
 export default function SettingsPage() {
