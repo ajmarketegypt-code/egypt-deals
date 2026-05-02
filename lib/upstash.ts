@@ -13,4 +13,5 @@ export const KEYS = {
   PUSH_SUBSCRIPTION: 'push_subscription',
   DEALS_SNAPSHOT: 'deals_snapshot',
   SCRAPE_REQUESTED: 'scrape_requested',
+  LAST_SCRAPE: 'last_scrape_ts',
 } as const

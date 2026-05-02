@@ -13,11 +13,22 @@ function timeAgo(ts: number | null) {
   return `${hrs} ${hrs === 1 ? 'hour' : 'hours'} ago`
 }
 
+// "in 43 minutes" / "overdue by 12 minutes". Used for the next-run estimate.
+function timeUntil(ts: number) {
+  const mins = Math.round((ts - Date.now()) / 60000)
+  if (mins <= 0) return `overdue by ${Math.abs(mins)} ${Math.abs(mins) === 1 ? 'minute' : 'minutes'}`
+  if (mins < 60) return `in ~${mins} ${mins === 1 ? 'minute' : 'minutes'}`
+  const hrs = Math.round(mins / 60)
+  return `in ~${hrs} ${hrs === 1 ? 'hour' : 'hours'}`
+}
+
 export default function SettingsPage() {
   const router = useRouter()
   const [pushEnabled, setPushEnabled] = useState(false)
   const [pushBlocked, setPushBlocked] = useState(false)
   const [lastScrape, setLastScrape] = useState<number | null>(null)
+  const [lastScrapeRun, setLastScrapeRun] = useState<number | null>(null)
+  const [nextEstimate, setNextEstimate] = useState<number | null>(null)
   const [totalDeals, setTotalDeals] = useState(0)
   const [requesting, setRequesting] = useState(false)
 
@@ -30,6 +41,13 @@ export default function SettingsPage() {
       setLastScrape(data.updatedAt ?? null)
       setTotalDeals(data.deals?.length ?? 0)
     })
+    // Separate endpoint: snapshot timestamp can be stale (zero-deals run skips
+    // snapshot write but bumps LAST_SCRAPE). This is the truer "is the scraper
+    // alive" signal.
+    fetch('/api/last-scrape').then(r => r.json()).then(({ lastScrapeTs, nextEstimateTs }) => {
+      setLastScrapeRun(lastScrapeTs || null)
+      setNextEstimate(nextEstimateTs || null)
+    }).catch(() => {})
   }, [])
 
   async function togglePush() {
@@ -86,7 +104,15 @@ export default function SettingsPage() {
         <div className="bg-slate-800 rounded-2xl p-4">
           <p className="text-slate-500 text-xs font-semibold tracking-wider mb-3">SCRAPER STATUS</p>
           <div className="flex justify-between mb-1">
-            <span className="text-slate-400 text-sm">Last updated</span>
+            <span className="text-slate-400 text-sm">Last scrape</span>
+            <span className="text-slate-200 text-sm">{timeAgo(lastScrapeRun ?? lastScrape)}</span>
+          </div>
+          <div className="flex justify-between mb-1">
+            <span className="text-slate-400 text-sm">Next run</span>
+            <span className="text-slate-200 text-sm">{nextEstimate ? timeUntil(nextEstimate) : 'Unknown'}</span>
+          </div>
+          <div className="flex justify-between mb-1">
+            <span className="text-slate-400 text-sm">Snapshot updated</span>
             <span className="text-slate-200 text-sm">{timeAgo(lastScrape)}</span>
           </div>
           <div className="flex justify-between">
