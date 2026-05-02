@@ -23,11 +23,20 @@ export function DealCard({ deal, isNew, onClick }: Props) {
       className="w-full text-left bg-slate-800 rounded-2xl overflow-hidden flex flex-col active:scale-[0.97] transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
       aria-label={`${deal.name}, ${fmtEGP(deal.currentPrice)}${deal.discountPct > 0 ? `, ${deal.discountPct}% off` : ''}`}
     >
-      {/* Image with overlay badges */}
+      {/* Image with overlay badges. When imageUrl is missing, render a gradient
+          block with the first 2 alphanumeric chars of the product name —
+          intentional-looking instead of a 📦 emoji. Strip non-alphanumerics so
+          "(NEW) Sony..." doesn't render "(N". */}
       <div className="relative aspect-square bg-slate-700 flex items-center justify-center">
-        {deal.imageUrl
-          ? <img src={deal.imageUrl} alt={deal.name} className="w-full h-full object-cover" />
-          : <span className="text-4xl">📦</span>}
+        {deal.imageUrl ? (
+          <img src={deal.imageUrl} alt={deal.name} className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center">
+            <span className="text-slate-300 text-5xl font-black tracking-tighter select-none">
+              {deal.name.replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase() || '··'}
+            </span>
+          </div>
+        )}
 
         {/* Top-right badges: NEW / discount */}
         <div className="absolute top-1.5 right-1.5 flex flex-col items-end gap-1">
