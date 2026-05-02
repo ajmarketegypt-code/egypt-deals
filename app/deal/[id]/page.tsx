@@ -12,67 +12,145 @@ function daysSince(ts: number) {
 // Thousands-separated EGP — easier to scan at a glance.
 const fmtEGP = (n: number) => `EGP ${Math.round(n).toLocaleString('en-US')}`
 
-// Convert our limited price-history data into a confidence rating that
-// honestly reflects how much we know about a product's pricing.
+// Confidence tiers. These drive both the "Limited / Moderate / Strong"
+// label *and* the verdict copy below — the two used to be independent which
+// meant a "Strong signal" label could sit above a verdict that hadn't
+// learned anything. Now they share the same thresholds.
+//   limited:  <5 samples OR <2 days — the percentile claim isn't reliable yet
+//   moderate: 5-14 samples or 2-7 days — percentile is real but not deep
+//   strong:   ≥14 samples AND ≥7 days — full confidence, bold framing
 function assessConfidence(priceCount: number, daysTracked: number) {
-  if (priceCount >= 14 && daysTracked >= 7)  return { level: 'high',   label: 'Strong signal',   color: 'text-green-400' }
-  if (priceCount >= 5  || daysTracked >= 2)  return { level: 'medium', label: 'Moderate signal', color: 'text-yellow-400' }
-  return { level: 'low', label: 'Limited data', color: 'text-orange-400' }
+  if (priceCount >= 14 && daysTracked >= 7)  return { level: 'strong'   as const, label: 'Strong signal',   color: 'text-green-400' }
+  if (priceCount >= 5  && daysTracked >= 2)  return { level: 'moderate' as const, label: 'Moderate signal', color: 'text-yellow-400' }
+  return { level: 'limited' as const, label: 'Limited data', color: 'text-orange-400' }
 }
 
-// Verdict on whether the current price is genuinely a good buy *based on what we know*.
-function assessPrice(d: Deal) {
+// Verdict on whether the current price is genuinely a good buy *based on
+// what we know*. Three branches by confidence:
+//   limited  → conservative position-in-range copy ("near the low seen")
+//   moderate → percentile rank with the sample count visible
+//   strong   → full "beats X% of N records" with run-length context
+//
+// The percentile / runLength / freqAtOrBelow fields on the Deal payload come
+// from the scraper's full price history (not the 30-point chart slice), so
+// they sharpen as weeks accumulate without requiring any frontend changes.
+function assessPrice(d: Deal, conf: { level: 'limited' | 'moderate' | 'strong' }) {
   const min = d.minPrice ?? d.currentPrice
   const max = d.maxPrice ?? d.currentPrice
   const avg = d.avgPrice ?? d.currentPrice
   const range = max - min
   const days = daysSince(d.firstSeenTs ?? Date.now())
+  const pct = d.percentile         // 0..1, 1 = best ever
+  const run = d.runLength ?? 0     // trailing samples within ±0.5%
+  const freq = d.freqAtOrBelow ?? 0 // samples ≤ current
+  const total = d.priceCount ?? d.priceHistory?.length ?? 0
 
-  // Where does the current price sit between min/max we've seen?
-  // 0 = at minimum, 1 = at maximum
-  const positionInRange = range > 0 ? (d.currentPrice - min) / range : 0
-
-  if (d.priceCount < 3 && days < 1) {
+  // Just-started — show honest "wait a bit" framing.
+  if (total < 3 && days < 1) {
     return {
       heading: 'Just started tracking',
-      detail: `Only ${d.priceCount} price ${d.priceCount === 1 ? 'point' : 'points'} so far. Wait a few days for a reliable read.`,
+      detail: `Only ${total} price ${total === 1 ? 'point' : 'points'} so far. Verdict sharpens as days pass.`,
       tone: 'neutral' as const,
     }
   }
-  // All samples have been the same price. With >=3 samples this is genuine
-  // "stable" signal, not "near the lowest seen — within EGP 0 of a 0-day window"
-  // which read as broken UX before.
-  if (range === 0 && d.priceCount >= 3) {
+  // All samples identical (genuinely flat — not a 0-day window glitch).
+  if (range === 0 && total >= 3) {
     return {
       heading: 'Price has been flat',
-      detail: `Held at ${fmtEGP(d.currentPrice)} across ${d.priceCount} samples${days > 0 ? ` over ${days}d` : ''}. No movement either way.`,
+      detail: `Held at ${fmtEGP(d.currentPrice)} across ${total} samples${days > 0 ? ` over ${days}d` : ''}. No movement either way.`,
       tone: 'flat' as const,
     }
   }
+
+  // STRONG: full percentile + run-length copy. This is the "your app got smart" verdict.
+  if (conf.level === 'strong' && pct !== undefined) {
+    const pctBeat = Math.round(pct * 100)
+    const runDays = Math.max(1, Math.round(run / 24)) // assuming hourly cadence — rough
+    if (pct >= 0.95) {
+      return {
+        heading: 'Best price we\'ve recorded',
+        detail: `Beats ${pctBeat}% of ${total} prices we've logged for this product. Seen at or below ${fmtEGP(d.currentPrice)} only ${freq} ${freq === 1 ? 'time' : 'times'}.`,
+        tone: 'great' as const,
+      }
+    }
+    if (pct >= 0.75) {
+      return {
+        heading: 'Strong price',
+        detail: `Beats ${pctBeat}% of ${total} recorded prices. Has held near ${fmtEGP(d.currentPrice)} for the last ${run} ${run === 1 ? 'sample' : 'samples'}${runDays > 1 ? ` (~${runDays}d)` : ''}.`,
+        tone: 'good' as const,
+      }
+    }
+    if (pct <= 0.25) {
+      return {
+        heading: 'Closer to the high end',
+        detail: `${pctBeat}% of ${total} recorded prices have been lower. Avg is ${fmtEGP(avg)} — worth waiting.`,
+        tone: 'bad' as const,
+      }
+    }
+    return {
+      heading: 'Mid-range price',
+      detail: `Sits at the ${pctBeat}th percentile of ${total} recorded prices (low ${fmtEGP(min)}, high ${fmtEGP(max)}, avg ${fmtEGP(avg)}).`,
+      tone: 'mid' as const,
+    }
+  }
+
+  // MODERATE: percentile is real but framed with hedging.
+  if (conf.level === 'moderate' && pct !== undefined) {
+    const pctBeat = Math.round(pct * 100)
+    if (pct >= 0.9) {
+      return {
+        heading: 'Lowest we\'ve seen so far',
+        detail: `Beats ${pctBeat}% of the ${total} prices recorded so far. Verdict will sharpen as we collect more.`,
+        tone: 'great' as const,
+      }
+    }
+    if (pct >= 0.6) {
+      return {
+        heading: 'Better than most prices we\'ve seen',
+        detail: `Below ${pctBeat}% of ${total} recorded prices over ${days}d. Promising but not deep history yet.`,
+        tone: 'good' as const,
+      }
+    }
+    if (pct <= 0.3) {
+      return {
+        heading: 'Higher than most we\'ve seen',
+        detail: `${100 - pctBeat}% of ${total} recorded prices have been at or below this. Worth waiting.`,
+        tone: 'bad' as const,
+      }
+    }
+    return {
+      heading: 'Around the middle',
+      detail: `Sits roughly mid-range across ${total} samples (low ${fmtEGP(min)}, high ${fmtEGP(max)}).`,
+      tone: 'mid' as const,
+    }
+  }
+
+  // LIMITED — fall back to position-in-range copy. Honest about thin data.
+  const positionInRange = range > 0 ? (d.currentPrice - min) / range : 0
   if (positionInRange === 0 && range > 0) {
     return {
-      heading: 'At the lowest we\'ve seen',
-      detail: `Down EGP ${Math.round(max - d.currentPrice)} from the highest price we recorded (${Math.round((1 - d.currentPrice / max) * 100)}% off).`,
-      tone: 'great' as const,
+      heading: 'Lowest in our short window',
+      detail: `Down EGP ${Math.round(max - d.currentPrice).toLocaleString('en-US')} from the highest of ${total} samples — but we've only tracked ${days}d.`,
+      tone: 'good' as const,
     }
   }
   if (positionInRange < 0.25) {
     return {
       heading: 'Near the lowest seen',
-      detail: `Within EGP ${Math.round(d.currentPrice - min)} of the all-time low (${days}-day window).`,
+      detail: `Within EGP ${Math.round(d.currentPrice - min).toLocaleString('en-US')} of the low across ${total} samples (${days}d window).`,
       tone: 'good' as const,
     }
   }
   if (positionInRange > 0.75) {
     return {
       heading: 'Closer to the highest seen',
-      detail: `Avg has been EGP ${Math.round(avg)} — wait for it to drop.`,
+      detail: `Avg has been ${fmtEGP(avg)} across ${total} samples — wait for a drop.`,
       tone: 'bad' as const,
     }
   }
   return {
     heading: 'Mid-range price',
-    detail: `Sits between EGP ${Math.round(min)} (low) and EGP ${Math.round(max)} (high). Avg EGP ${Math.round(avg)}.`,
+    detail: `Sits between ${fmtEGP(min)} (low) and ${fmtEGP(max)} (high) across ${total} samples.`,
     tone: 'mid' as const,
   }
 }
@@ -96,7 +174,7 @@ export default function DealDetailPage() {
   const storeBg = deal.store === 'amazon' ? 'bg-orange-500' : 'bg-yellow-400'
   const days = daysSince(deal.firstSeenTs ?? Date.now())
   const confidence = assessConfidence(deal.priceCount ?? 1, days)
-  const verdict = assessPrice(deal)
+  const verdict = assessPrice(deal, confidence)
   const hasRealDiscount = deal.discountPct > 0 && deal.originalPrice > deal.currentPrice
 
   // Cross-shop link: open Google Shopping in Egypt with the product name
@@ -179,6 +257,24 @@ export default function DealDetailPage() {
           {deal.priceCount ?? deal.priceHistory.length} data {(deal.priceCount ?? deal.priceHistory.length) === 1 ? 'point' : 'points'}
           {' '}• Hourly tracking
         </p>
+        {/* Learning row — only shows when we have a percentile signal. Reads
+            "Beats 88% • At this price for 4 samples • Seen ≤ EGP X: 4/47" */}
+        {deal.percentile !== undefined && (deal.priceCount ?? 0) >= 5 && (
+          <div className="mt-3 pt-3 border-t border-slate-700 grid grid-cols-3 gap-2 text-center">
+            <div>
+              <p className="text-slate-500 text-[9px] font-semibold tracking-wider">PERCENTILE</p>
+              <p className="text-slate-100 text-xs font-bold mt-0.5">{Math.round(deal.percentile * 100)}%</p>
+            </div>
+            <div>
+              <p className="text-slate-500 text-[9px] font-semibold tracking-wider">RUN</p>
+              <p className="text-slate-100 text-xs font-bold mt-0.5">{deal.runLength ?? 1}{(deal.runLength ?? 1) === 1 ? ' sample' : ' samples'}</p>
+            </div>
+            <div>
+              <p className="text-slate-500 text-[9px] font-semibold tracking-wider">SEEN ≤</p>
+              <p className="text-slate-100 text-xs font-bold mt-0.5">{deal.freqAtOrBelow ?? 1}/{deal.priceCount ?? 1}</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Smart verdict from scraper (trend analysis). Hidden when we have

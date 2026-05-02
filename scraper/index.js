@@ -1,5 +1,6 @@
 import 'dotenv/config'
-import { initDb, upsertProduct, recordPrice, getMinPrice, getPriceCount, getPriceHistory, getAvgPrice, getSecondLowestPrice, getMaxPrice, getFirstSeenTs } from './db.js'
+import { initDb, upsertProduct, recordPrice, getMinPrice, getPriceCount, getPriceHistory, getAvgPrice, getSecondLowestPrice, getMaxPrice, getFirstSeenTs, getPercentileRank, getRunLength, getFreqAtOrBelow } from './db.js'
+import { runWatcher } from './watcher.js'
 import { isAllTimeLow, buildSmartVerdict } from './atl.js'
 import { scrapeAmazon } from './amazon.js'
 import { scrapeNoon } from './noon.js'
@@ -49,6 +50,13 @@ export async function runScrape() {
       const seenAtThisPrice = Math.max(0, history.filter(h => h.price === deal.currentPrice).length - 1)
       const verdict = buildSmartVerdict({ currentPrice: deal.currentPrice, prevLow, recentPrices: trendPrices, seenAtThisPrice })
 
+      // Learning signal: percentile rank, run length, and frequency-at-or-below.
+      // Computed against the FULL price history (not the 30-point chart slice)
+      // so the verdict gets sharper as weeks accumulate.
+      const percentile = getPercentileRank(db, deal.id, deal.currentPrice)
+      const runLength = getRunLength(db, deal.id, deal.currentPrice)
+      const freq = getFreqAtOrBelow(db, deal.id, deal.currentPrice)
+
       atlDeals.push({
         ...deal,
         minPrice,
@@ -60,6 +68,9 @@ export async function runScrape() {
         discountPct,
         verdict,
         priceHistory: chartPrices,
+        percentile: percentile ?? 1,
+        runLength,
+        freqAtOrBelow: freq.atOrBelow,
         scrapedAt: Date.now(),
       })
     }
@@ -121,6 +132,17 @@ export async function runScrape() {
     }
 
     console.log(`[scraper] done — ${top50.length} ATL deals uploaded, ${newDeals.length} new (notified), ${savedPushed} saved-deal pushes`)
+
+    // Watcher pass: re-check N known products that did NOT appear in today's
+    // /deals listing, so their price history keeps growing even after they
+    // fall off the deals feed. Writes to SQLite only — does not touch the
+    // user-facing snapshot. See scraper/watcher.js.
+    try {
+      const seenIds = allDeals.map(d => d.id)
+      await runWatcher(db, { excludeIds: seenIds, limit: 12 })
+    } catch (err) {
+      console.error('[scraper] watcher failed (continuing):', err.message)
+    }
   } finally {
     db.close()
   }

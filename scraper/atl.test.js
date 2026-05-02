@@ -2,11 +2,11 @@ import { describe, test, expect } from '@jest/globals'
 import { isAllTimeLow, buildSmartVerdict } from './atl.js'
 
 describe('isAllTimeLow', () => {
-  test('false when fewer than 3 records (prevents new-product false positives)', () => {
-    expect(isAllTimeLow({ currentPrice: 100, minPrice: 100, priceCount: 2 })).toBe(false)
+  test('false when fewer than 5 records (prevents new-product false positives)', () => {
+    expect(isAllTimeLow({ currentPrice: 100, minPrice: 100, priceCount: 4 })).toBe(false)
   })
-  test('true when current equals min and count >= 3', () => {
-    expect(isAllTimeLow({ currentPrice: 100, minPrice: 100, priceCount: 3 })).toBe(true)
+  test('true when current equals min and count >= 5', () => {
+    expect(isAllTimeLow({ currentPrice: 100, minPrice: 100, priceCount: 5 })).toBe(true)
   })
   test('true when current is below historical min', () => {
     expect(isAllTimeLow({ currentPrice: 89, minPrice: 100, priceCount: 5 })).toBe(true)
