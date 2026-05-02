@@ -137,7 +137,10 @@ export default function FeedPage() {
     if (sortBy === 'priceAsc')   sorted.sort((a, b) => a.currentPrice - b.currentPrice)
     if (sortBy === 'priceDesc')  sorted.sort((a, b) => b.currentPrice - a.currentPrice)
     if (sortBy === 'discount')   sorted.sort((a, b) => b.discountPct - a.discountPct)
-    if (sortBy === 'newest')     sorted.sort((a, b) => (b.scrapedAt || 0) - (a.scrapedAt || 0))
+    // "Newest" = most recently first-seen by the scraper. scrapedAt is uniform
+    // across a scrape run (set to Date.now() for every deal), so sorting on it
+    // is a no-op. firstSeenTs is per-product and is what we actually want here.
+    if (sortBy === 'newest')     sorted.sort((a, b) => (b.firstSeenTs || 0) - (a.firstSeenTs || 0))
     return sorted
   }, [deals, store, category, search, sortBy])
 
