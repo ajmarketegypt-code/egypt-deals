@@ -44,6 +44,7 @@ export default function FeedPage() {
   const [sortBy, setSortBy] = useState<SortKey>(() => loadFilter('sortBy', 'priceAsc'))
   const [seenIds, setSeenIds] = useState<Set<string>>(new Set())
   const [refreshing, setRefreshing] = useState(false)
+  const [refreshError, setRefreshError] = useState<string | null>(null)
   const touchStartY = useRef(0)
   const pulling = useRef(false)
 
@@ -113,6 +114,8 @@ export default function FeedPage() {
 
   async function handleRefresh() {
     setRefreshing(true)
+    setRefreshError(null)
+    let advanced = false
     try {
       await fetch('/api/request-scrape', { method: 'POST' })
       const before = snapshot?.updatedAt ?? 0
@@ -121,11 +124,17 @@ export default function FeedPage() {
         try {
           const res = await fetch('/api/deals')
           const data: DealsSnapshot = await res.json()
-          if (data.updatedAt > before) { setSnapshot(data); break }
+          if (data.updatedAt > before) { setSnapshot(data); advanced = true; break }
         } catch { /* network blip — try next iteration */ }
       }
     } finally {
       setRefreshing(false)
+      // 90s elapsed and no new snapshot → scraper PC is probably off.
+      // Surface as a transient banner so the user trusts the spinner.
+      if (!advanced) {
+        setRefreshError("Couldn't reach scraper — your PC may be off")
+        setTimeout(() => setRefreshError(null), 6000)
+      }
     }
   }
 
@@ -232,6 +241,23 @@ export default function FeedPage() {
             <p className="text-amber-300/80 text-[11px] mt-0.5">
               Last updated {timeAgo(snapshot.updatedAt)}. Your PC may be off — pull down to refresh.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Manual-refresh failure toast — auto-dismisses after 6s. The previous
+          poll loop silently gave up on timeout; users couldn't tell whether
+          their tap registered. */}
+      {refreshError && (
+        <div
+          className="mt-3 bg-red-950 border border-red-900 rounded-2xl p-3 flex gap-2 items-start"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="text-base">⚠️</span>
+          <div className="flex-1">
+            <p className="text-red-200 text-xs font-semibold">{refreshError}</p>
+            <p className="text-red-300/80 text-[11px] mt-0.5">Make sure the scraper task is running, then try again.</p>
           </div>
         </div>
       )}
