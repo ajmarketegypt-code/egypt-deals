@@ -5,6 +5,6 @@ export const dynamic = 'force-dynamic'
 
 export async function GET() {
   const snapshot = await redis.get(KEYS.DEALS_SNAPSHOT)
-  if (!snapshot) return NextResponse.json({ deals: [], updatedAt: null })
+  if (!snapshot) return NextResponse.json({ deals: [], updatedAt: 0 })
   return NextResponse.json(snapshot)
 }

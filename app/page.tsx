@@ -34,6 +34,7 @@ function loadFilter<K extends keyof SavedFilters>(key: K, fallback: SavedFilters
 export default function FeedPage() {
   const router = useRouter()
   const [snapshot, setSnapshot] = useState<DealsSnapshot | null>(null)
+  const [loading, setLoading] = useState(true)
   // Lazy-init from localStorage so filters persist across reloads / PWA relaunch.
   // Note: initial render is server-side (well, client during PWA, but Next prerenders),
   // so the initializer must check for window.
@@ -96,11 +97,17 @@ export default function FeedPage() {
   }, [])
 
   async function fetchDeals() {
-    const res = await fetch('/api/deals')
-    const data: DealsSnapshot = await res.json()
-    setSnapshot(data)
-    if (data.deals) {
-      localStorage.setItem(SEEN_KEY, JSON.stringify(data.deals.map((d: Deal) => d.id)))
+    try {
+      const res = await fetch('/api/deals')
+      const data: DealsSnapshot = await res.json()
+      setSnapshot(data)
+      if (data.deals) {
+        localStorage.setItem(SEEN_KEY, JSON.stringify(data.deals.map((d: Deal) => d.id)))
+      }
+    } catch {
+      // Network blip — keep whatever stale snapshot we have, surface offline UI later
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -157,7 +164,13 @@ export default function FeedPage() {
               aria-label="Refresh deals"
             >
               <span className={refreshing ? 'inline-block animate-spin' : ''}>{refreshing ? '⏳' : '↻'}</span>
-              <span>{refreshing ? 'Refreshing' : snapshot?.updatedAt ? timeAgo(snapshot.updatedAt) : 'Loading'}</span>
+              <span>
+                {refreshing
+                  ? 'Refreshing'
+                  : snapshot?.updatedAt
+                    ? timeAgo(snapshot.updatedAt)
+                    : loading ? 'Loading' : 'No data yet'}
+              </span>
             </button>
             <button
               onClick={() => router.push('/settings')}
@@ -208,7 +221,40 @@ export default function FeedPage() {
         />
       </div>
 
-      {filtered.length === 0 && (
+      {/* Stale-data warning. The scraper runs hourly via Task Scheduler; if the
+          snapshot is older than 3h, the user's PC was probably off. Soft amber
+          banner so the deal data below is still readable but they know it's old. */}
+      {snapshot?.updatedAt && Date.now() - snapshot.updatedAt > 3 * 60 * 60 * 1000 && (
+        <div className="mt-3 bg-amber-950 border border-amber-900 rounded-2xl p-3 flex gap-2 items-start">
+          <span className="text-base">⚠️</span>
+          <div className="flex-1">
+            <p className="text-amber-200 text-xs font-semibold">Data is stale</p>
+            <p className="text-amber-300/80 text-[11px] mt-0.5">
+              Last updated {timeAgo(snapshot.updatedAt)}. Your PC may be off — pull down to refresh.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Skeleton grid while initial fetch is in flight — gives the page weight
+          and tells the user something is happening, instead of the old "Loading"
+          text + empty space. */}
+      {loading && deals.length === 0 && (
+        <div className="grid grid-cols-2 gap-2 mt-3" aria-hidden="true">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="bg-slate-800 rounded-2xl overflow-hidden animate-pulse">
+              <div className="aspect-square bg-slate-700" />
+              <div className="p-2.5 flex flex-col gap-1.5">
+                <div className="h-3 bg-slate-700 rounded w-full" />
+                <div className="h-3 bg-slate-700 rounded w-2/3" />
+                <div className="h-3 bg-slate-700 rounded w-1/3 mt-1" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!loading && filtered.length === 0 && (
         <div className="text-center text-slate-500 py-16">
           <p className="text-4xl mb-3">🔍</p>
           <p className="text-sm">
