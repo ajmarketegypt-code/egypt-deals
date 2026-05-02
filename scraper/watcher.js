@@ -137,8 +137,10 @@ export async function runWatcher(db, { excludeIds = [], limit = 12 } = {}) {
         ok++
       }
     } catch (err) {
-      console.log(`[watcher] fail ${t.id}: ${err.message}`)
-      fail++
+      // out-of-stock and captcha aren't parse failures — log as skip.
+      const isExpected = err.message === 'out of stock' || err.message === 'captcha'
+      console.log(`[watcher] ${isExpected ? 'skip' : 'fail'} ${t.id}: ${err.message}`)
+      if (isExpected) skip++; else fail++
     }
     // Be polite — 1.5s between watcher fetches. 12 products × 1.5s = 18s.
     await new Promise(r => setTimeout(r, 1500))
