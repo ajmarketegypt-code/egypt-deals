@@ -15,12 +15,16 @@ function timeAgo(ts: number | null) {
 export default function SettingsPage() {
   const router = useRouter()
   const [pushEnabled, setPushEnabled] = useState(false)
+  const [pushBlocked, setPushBlocked] = useState(false)
   const [lastScrape, setLastScrape] = useState<number | null>(null)
   const [totalDeals, setTotalDeals] = useState(0)
   const [requesting, setRequesting] = useState(false)
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && 'Notification' in window) setPushEnabled(Notification.permission === 'granted')
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setPushEnabled(Notification.permission === 'granted')
+      setPushBlocked(Notification.permission === 'denied')
+    }
     fetch('/api/deals').then(r => r.json()).then((data: DealsSnapshot) => {
       setLastScrape(data.updatedAt ?? null)
       setTotalDeals(data.deals?.length ?? 0)
@@ -57,9 +61,19 @@ export default function SettingsPage() {
         <div className="bg-slate-800 rounded-2xl p-4 flex justify-between items-center">
           <div>
             <p className="text-slate-100 font-semibold text-sm">Push Notifications</p>
-            <p className="text-slate-500 text-xs mt-0.5">Alert on new all-time low prices</p>
+            <p className="text-slate-500 text-xs mt-0.5">
+              {pushBlocked
+                ? 'Blocked — re-enable in iOS Settings → Notifications → Deals'
+                : 'Alert on new all-time low prices'}
+            </p>
           </div>
-          <button onClick={togglePush} className={`w-12 h-7 rounded-full transition-colors relative ${pushEnabled ? 'bg-green-500' : 'bg-slate-600'}`}>
+          <button
+            onClick={togglePush}
+            disabled={pushBlocked}
+            aria-pressed={pushEnabled}
+            aria-label="Toggle push notifications"
+            className={`w-12 h-7 rounded-full transition-colors relative disabled:opacity-50 ${pushEnabled ? 'bg-green-500' : 'bg-slate-600'}`}
+          >
             <div className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow transition-all ${pushEnabled ? 'left-6' : 'left-1'}`} />
           </button>
         </div>

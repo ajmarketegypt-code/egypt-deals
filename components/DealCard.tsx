@@ -6,6 +6,10 @@ interface Props {
   onClick: () => void
 }
 
+// Format price with thousands separators — "12,999" reads way faster
+// at a glance than "12999" on a small mobile screen.
+const fmtEGP = (n: number) => `EGP ${Math.round(n).toLocaleString('en-US')}`
+
 // Compact card designed for a 2-column grid. Image on top fills card width,
 // then name (2 lines max), price row, store badge.
 export function DealCard({ deal, isNew, onClick }: Props) {
@@ -16,7 +20,8 @@ export function DealCard({ deal, isNew, onClick }: Props) {
   return (
     <button
       onClick={onClick}
-      className="w-full text-left bg-slate-800 rounded-2xl overflow-hidden flex flex-col active:scale-[0.97] transition-transform"
+      className="w-full text-left bg-slate-800 rounded-2xl overflow-hidden flex flex-col active:scale-[0.97] transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+      aria-label={`${deal.name}, ${fmtEGP(deal.currentPrice)}${deal.discountPct > 0 ? `, ${deal.discountPct}% off` : ''}`}
     >
       {/* Image with overlay badges */}
       <div className="relative aspect-square bg-slate-700 flex items-center justify-center">
@@ -49,9 +54,9 @@ export function DealCard({ deal, isNew, onClick }: Props) {
           {deal.name}
         </p>
         <div className="flex items-baseline gap-1.5 flex-wrap mt-auto">
-          <span className="text-green-400 font-bold text-sm leading-none">EGP {deal.currentPrice}</span>
+          <span className="text-green-400 font-bold text-sm leading-none">{fmtEGP(deal.currentPrice)}</span>
           {hasRealDiscount && (
-            <span className="text-slate-500 text-[10px] line-through leading-none">EGP {deal.originalPrice}</span>
+            <span className="text-slate-500 text-[10px] line-through leading-none">{fmtEGP(deal.originalPrice)}</span>
           )}
         </div>
       </div>

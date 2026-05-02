@@ -9,6 +9,9 @@ function daysSince(ts: number) {
   return Math.max(0, Math.floor((Date.now() - ts) / (24 * 60 * 60 * 1000)))
 }
 
+// Thousands-separated EGP — easier to scan at a glance.
+const fmtEGP = (n: number) => `EGP ${Math.round(n).toLocaleString('en-US')}`
+
 // Convert our limited price-history data into a confidence rating that
 // honestly reflects how much we know about a product's pricing.
 function assessConfidence(priceCount: number, daysTracked: number) {
@@ -117,9 +120,9 @@ export default function DealDetailPage() {
 
       <div className="mt-4 bg-green-950 border border-green-800 rounded-2xl p-4 flex justify-between items-center">
         <div>
-          <p className="text-green-400 text-3xl font-black">EGP {deal.currentPrice}</p>
+          <p className="text-green-400 text-3xl font-black">{fmtEGP(deal.currentPrice)}</p>
           {hasRealDiscount && (
-            <p className="text-slate-500 text-sm line-through mt-0.5">EGP {deal.originalPrice}</p>
+            <p className="text-slate-500 text-sm line-through mt-0.5">{fmtEGP(deal.originalPrice)}</p>
           )}
         </div>
         <div className="text-right">
@@ -149,9 +152,9 @@ export default function DealDetailPage() {
         </div>
         <div className="grid grid-cols-4 gap-2 mb-3">
           {[
-            { label: 'LOW',     value: `EGP ${Math.round(deal.minPrice ?? deal.currentPrice)}` },
-            { label: 'AVG',     value: `EGP ${Math.round(deal.avgPrice ?? deal.currentPrice)}` },
-            { label: 'HIGH',    value: `EGP ${Math.round(deal.maxPrice ?? deal.currentPrice)}` },
+            { label: 'LOW',     value: fmtEGP(deal.minPrice ?? deal.currentPrice) },
+            { label: 'AVG',     value: fmtEGP(deal.avgPrice ?? deal.currentPrice) },
+            { label: 'HIGH',    value: fmtEGP(deal.maxPrice ?? deal.currentPrice) },
             { label: 'TRACKED', value: days === 0 ? 'today' : `${days}d` },
           ].map(({ label, value }) => (
             <div key={label} className="text-center">
@@ -167,8 +170,11 @@ export default function DealDetailPage() {
         </p>
       </div>
 
-      {/* Smart verdict from scraper (trend analysis) */}
-      {deal.verdict && (
+      {/* Smart verdict from scraper (trend analysis). Hidden when we have
+          <3 price points — at that point the verdict is generic ("Matches
+          previous all-time low") and just repeats what the price-assessment
+          block above already says. */}
+      {deal.verdict && (deal.priceCount ?? 0) >= 3 && (
         <div className="mt-3 bg-blue-950 border border-blue-900 rounded-2xl p-4 flex gap-3">
           <span className="text-xl">🤖</span>
           <div>
@@ -194,7 +200,7 @@ export default function DealDetailPage() {
           🔎 Compare
         </a>
         <button
-          onClick={() => navigator.clipboard.writeText(`${deal.name} — EGP ${deal.currentPrice}\n${deal.url}`)}
+          onClick={() => navigator.clipboard.writeText(`${deal.name} — ${fmtEGP(deal.currentPrice)}\n${deal.url}`)}
           className="w-12 bg-slate-800 rounded-2xl flex items-center justify-center text-lg"
           title="Copy deal link"
         >📤</button>
