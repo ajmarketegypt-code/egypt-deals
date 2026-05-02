@@ -39,6 +39,16 @@ function assessPrice(d: Deal) {
       tone: 'neutral' as const,
     }
   }
+  // All samples have been the same price. With >=3 samples this is genuine
+  // "stable" signal, not "near the lowest seen — within EGP 0 of a 0-day window"
+  // which read as broken UX before.
+  if (range === 0 && d.priceCount >= 3) {
+    return {
+      heading: 'Price has been flat',
+      detail: `Held at ${fmtEGP(d.currentPrice)} across ${d.priceCount} samples${days > 0 ? ` over ${days}d` : ''}. No movement either way.`,
+      tone: 'flat' as const,
+    }
+  }
   if (positionInRange === 0 && range > 0) {
     return {
       heading: 'At the lowest we\'ve seen',
@@ -98,8 +108,9 @@ export default function DealDetailPage() {
     mid:     'bg-slate-800 border-slate-700',
     bad:     'bg-red-950 border-red-900',
     neutral: 'bg-slate-800 border-slate-700',
+    flat:    'bg-slate-800 border-slate-700',
   }[verdict.tone]
-  const toneIcon = { great: '🔥', good: '✅', mid: '➖', bad: '⚠️', neutral: '⏳' }[verdict.tone]
+  const toneIcon = { great: '🔥', good: '✅', mid: '➖', bad: '⚠️', neutral: '⏳', flat: '📊' }[verdict.tone]
 
   return (
     <main className="max-w-lg mx-auto px-4 pb-8">
