@@ -5,7 +5,7 @@ self.addEventListener('push', event => {
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,
-      icon: data.icon || '/icons/icon-192.png',
+      icon: data.icon || '/icons/icon-192-v3.png',
       data: { url: data.url },
     })
   )
@@ -27,8 +27,8 @@ self.addEventListener('notificationclick', event => {
 self.addEventListener('install', e => { self.skipWaiting() })
 self.addEventListener('activate', e => { e.waitUntil(clients.claim()) })
 
-self.addEventListener('fetch', event => {
-  if (event.request.mode === 'navigate') {
-    event.respondWith(fetch(event.request).catch(() => caches.match('/')))
-  }
-})
+// Note: previously had a fetch handler that tried `caches.match('/')` on
+// network failure, but no precache was ever populated, so it returned
+// undefined and broke navigation when the user lost connectivity.
+// Without a fetch handler the browser falls back to its native cache and
+// the user sees its standard offline page — strictly better than what we had.
