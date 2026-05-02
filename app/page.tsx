@@ -214,6 +214,11 @@ export default function FeedPage() {
               </span>
             </button>
             <button
+              onClick={() => router.push('/saved')}
+              className="text-yellow-400 text-lg w-9 h-9 flex items-center justify-center rounded-full active:bg-slate-800"
+              aria-label="Saved deals"
+            >★</button>
+            <button
               onClick={() => router.push('/settings')}
               className="text-slate-400 text-lg w-9 h-9 flex items-center justify-center rounded-full active:bg-slate-800"
               aria-label="Settings"

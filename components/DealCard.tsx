@@ -1,4 +1,7 @@
+'use client'
+import { useEffect, useState } from 'react'
 import type { Deal } from '@/lib/types'
+import { isSaved, saveDeal, unsaveDeal } from '@/lib/wishlist'
 
 interface Props {
   deal: Deal
@@ -17,10 +20,49 @@ export function DealCard({ deal, isNew, onClick }: Props) {
   const storeBg = deal.store === 'amazon' ? 'bg-orange-500' : 'bg-yellow-400'
   const storeName = deal.store === 'amazon' ? 'Amazon' : 'Noon'
 
+  // Saved state. Initialise on mount so SSR/CSR markup matches; subscribe to
+  // a window-level "wishlist-change" event so toggling on /saved or another
+  // card instance reflects here without a remount.
+  const [saved, setSaved] = useState(false)
+  useEffect(() => {
+    setSaved(isSaved(deal.id))
+    const handler = () => setSaved(isSaved(deal.id))
+    window.addEventListener('wishlist-change', handler)
+    window.addEventListener('storage', handler)
+    return () => {
+      window.removeEventListener('wishlist-change', handler)
+      window.removeEventListener('storage', handler)
+    }
+  }, [deal.id])
+
+  function toggleSaved(e: React.MouseEvent | React.KeyboardEvent) {
+    e.stopPropagation()
+    if (saved) {
+      unsaveDeal(deal.id)
+      setSaved(false)
+    } else {
+      saveDeal({
+        id: deal.id,
+        name: deal.name,
+        store: deal.store,
+        url: deal.url,
+        imageUrl: deal.imageUrl,
+        savedAt: Date.now(),
+        savedAtPrice: deal.currentPrice,
+      })
+      setSaved(true)
+    }
+  }
+
+  // Card root is a div with role=button — we need a real <button> nested
+  // inside for the star, and HTML doesn't allow nesting <button>s.
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
-      className="w-full text-left bg-slate-800 rounded-2xl overflow-hidden flex flex-col active:scale-[0.97] transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() } }}
+      className="w-full text-left bg-slate-800 rounded-2xl overflow-hidden flex flex-col active:scale-[0.97] transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 cursor-pointer"
       aria-label={`${deal.name}, ${fmtEGP(deal.currentPrice)}${deal.discountPct > 0 ? `, ${deal.discountPct}% off` : ''}`}
     >
       {/* Image with overlay badges. When imageUrl is missing, render a gradient
@@ -48,13 +90,25 @@ export function DealCard({ deal, isNew, onClick }: Props) {
           )}
         </div>
 
-        {/* Top-left store dot */}
-        <span
-          className={`absolute top-1.5 left-1.5 w-5 h-5 rounded-full ${storeBg} text-black text-[8px] font-black flex items-center justify-center leading-none`}
-          title={`${storeName}.eg`}
-        >
-          {storeName[0]}
-        </span>
+        {/* Top-left: store dot + star (star sits to the right of the dot so the
+            tap targets don't crowd the corner). */}
+        <div className="absolute top-1.5 left-1.5 flex items-center gap-1">
+          <span
+            className={`w-5 h-5 rounded-full ${storeBg} text-black text-[8px] font-black flex items-center justify-center leading-none`}
+            title={`${storeName}.eg`}
+          >
+            {storeName[0]}
+          </span>
+          <button
+            onClick={toggleSaved}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') toggleSaved(e) }}
+            className={`w-7 h-7 rounded-full flex items-center justify-center text-sm leading-none transition-colors ${saved ? 'bg-yellow-400 text-black' : 'bg-slate-900/60 text-slate-300 hover:bg-slate-900/80'}`}
+            aria-label={saved ? 'Remove from saved' : 'Save for later'}
+            aria-pressed={saved}
+          >
+            {saved ? '★' : '☆'}
+          </button>
+        </div>
       </div>
 
       {/* Text section */}
@@ -69,6 +123,6 @@ export function DealCard({ deal, isNew, onClick }: Props) {
           )}
         </div>
       </div>
-    </button>
+    </div>
   )
 }

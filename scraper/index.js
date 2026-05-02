@@ -7,6 +7,7 @@ import { sendDealNotification, sendDigestNotification } from './push.js'
 import {
   getPushSubscription, setDealsSnapshot, setLastScrapeTs,
   getNotifiedDealIds, addNotifiedDealIds,
+  getSavedDeals, getSavedNotifiedMap, setSavedNotifiedPrice,
 } from './upstash.js'
 
 const DB_PATH = './data/prices.db'
@@ -85,7 +86,41 @@ export async function runScrape() {
     await setDealsSnapshot({ deals: top50, updatedAt: Date.now() })
     await setLastScrapeTs()
 
-    console.log(`[scraper] done — ${top50.length} ATL deals uploaded, ${newDeals.length} new (notified)`)
+    // Wishlist push: notify the user when a saved product appears in this
+    // run AT OR BELOW its saved-when price. We push only when the price
+    // strictly drops vs the last price we pushed about, so flat prices don't
+    // re-spam every hour. These pushes piggyback on the same subscription as
+    // the digest; we send one per saved drop (low volume — Ahmed's wishlist).
+    let savedPushed = 0
+    if (subscription) {
+      const savedMap = await getSavedDeals()
+      const lastPushed = await getSavedNotifiedMap()
+      const liveById = Object.fromEntries(allDeals.map(d => [d.id, d]))
+      for (const [id, saved] of Object.entries(savedMap)) {
+        const live = liveById[id]
+        if (!live) continue // saved item not in today's scrape — skip
+        const target = saved.savedAtPrice
+        if (typeof target !== 'number' || live.currentPrice > target) continue
+        const prev = lastPushed[id]
+        // Re-push only when the price moved further down than last alert.
+        // First-ever push: always send.
+        if (prev !== undefined && live.currentPrice >= prev) continue
+        try {
+          await sendDealNotification(subscription, {
+            ...live,
+            // Use a watchful prefix so the user knows it's a wishlist alert,
+            // not the daily digest.
+            name: `★ ${live.name}`,
+          })
+          await setSavedNotifiedPrice(id, live.currentPrice)
+          savedPushed++
+        } catch (err) {
+          console.error(`[scraper] saved push failed for ${id}:`, err.message)
+        }
+      }
+    }
+
+    console.log(`[scraper] done — ${top50.length} ATL deals uploaded, ${newDeals.length} new (notified), ${savedPushed} saved-deal pushes`)
   } finally {
     db.close()
   }

@@ -73,7 +73,12 @@ export default function SettingsPage() {
           className="text-slate-400 text-base py-2 px-2 -mx-2 active:opacity-60"
           aria-label="Back"
         >←</button>
-        <h1 className="text-xl font-bold">Settings</h1>
+        <h1 className="text-xl font-bold flex-1">Settings</h1>
+        <button
+          onClick={() => router.push('/saved')}
+          className="text-yellow-400 text-base px-3 py-1.5 rounded-full bg-slate-800 active:opacity-60"
+          aria-label="Saved deals"
+        >★ Saved</button>
       </div>
 
       <div className="flex flex-col gap-3">

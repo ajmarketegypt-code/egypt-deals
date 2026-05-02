@@ -12,6 +12,11 @@ export const KEYS = {
   SCRAPE_REQUESTED: 'scrape_requested',
   LAST_SCRAPE: 'last_scrape_ts',
   NOTIFIED_DEAL_IDS: 'notified_deal_ids', // SET of deal IDs already notified
+  // Wishlist mirror written by the frontend (/api/wishlist). Scraper reads
+  // these each run to match saved products against the current scrape.
+  SAVED_DEAL_IDS: 'saved_deal_ids',
+  SAVED_DEAL_META: 'saved_deal_meta',
+  SAVED_NOTIFIED: 'saved_notified',
 }
 
 export async function getPushSubscription() {
@@ -46,4 +51,39 @@ export async function addNotifiedDealIds(ids) {
   await redis.sadd(KEYS.NOTIFIED_DEAL_IDS, ...ids)
   // Refresh TTL on every write so the set reflects the rolling 30-day window
   await redis.expire(KEYS.NOTIFIED_DEAL_IDS, 60 * 60 * 24 * 30)
+}
+
+// Read all saved-deal metadata as { [id]: { savedAtPrice, ... } }. Returns {}
+// when nothing has ever been saved.
+export async function getSavedDeals() {
+  const meta = await redis.hgetall(KEYS.SAVED_DEAL_META)
+  if (!meta) return {}
+  // hgetall in @upstash/redis auto-parses JSON when it can; values may be
+  // either strings or already-parsed objects depending on payload size.
+  // Normalise to objects.
+  const out = {}
+  for (const [id, raw] of Object.entries(meta)) {
+    if (!raw) continue
+    if (typeof raw === 'string') {
+      try { out[id] = JSON.parse(raw) } catch { /* skip corrupt */ }
+    } else {
+      out[id] = raw
+    }
+  }
+  return out
+}
+
+// Read/write the "we've already pushed about this saved deal at price X" map.
+// Keyed by saved deal ID, value is the last-pushed price. We re-push only
+// when the new current price is strictly below the last-pushed price.
+export async function getSavedNotifiedMap() {
+  const map = await redis.hgetall(KEYS.SAVED_NOTIFIED)
+  if (!map) return {}
+  const out = {}
+  for (const [id, v] of Object.entries(map)) out[id] = Number(v)
+  return out
+}
+
+export async function setSavedNotifiedPrice(id, price) {
+  await redis.hset(KEYS.SAVED_NOTIFIED, { [id]: price })
 }
