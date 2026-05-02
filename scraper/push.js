@@ -1,5 +1,28 @@
 import webpush from 'web-push'
 import 'dotenv/config'
+import { Redis } from '@upstash/redis'
+
+// Local redis handle for clearing dead subscriptions. Lazy-init so a missing
+// env var only bites on actual use, not on import.
+let _redis = null
+function redis() {
+  if (!_redis) {
+    _redis = new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    })
+  }
+  return _redis
+}
+
+async function clearDeadSubscription() {
+  try {
+    await redis().del('push_subscription')
+    console.log('[push] cleared dead subscription from Upstash')
+  } catch (err) {
+    console.error('[push] failed to clear dead subscription:', err.message)
+  }
+}
 
 const vapidEmail = process.env.VAPID_EMAIL?.startsWith('mailto:') || process.env.VAPID_EMAIL?.startsWith('https:')
   ? process.env.VAPID_EMAIL
@@ -27,6 +50,7 @@ export async function sendDigestNotification(subscription, deals) {
   } catch (err) {
     if (err.statusCode === 404 || err.statusCode === 410) {
       console.log('[push] subscription expired — user uninstalled PWA')
+      await clearDeadSubscription()
     } else {
       console.error('[push] digest error:', err.message)
     }
@@ -48,7 +72,7 @@ export async function sendDealNotification(subscription, deal) {
     title: `Deals — ${deal.name.slice(0, 50)}`,
     body: `EGP ${deal.currentPrice} (${discountPct}% off) on ${storeName} — All-time low`,
     url: `/deal/${deal.id}`,
-    icon: '/icons/icon-192.png',
+    icon: '/icons/icon-192-v3.png',
   })
 
   try {
@@ -57,6 +81,7 @@ export async function sendDealNotification(subscription, deal) {
   } catch (err) {
     if (err.statusCode === 404 || err.statusCode === 410) {
       console.log('[push] subscription expired — user uninstalled PWA')
+      await clearDeadSubscription()
     } else {
       console.error('[push] error:', err.message)
     }
