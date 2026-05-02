@@ -24,12 +24,22 @@ export function buildSmartVerdict({ currentPrice, prevLow, recentPrices, seenAtT
     const allFalling = diffs.every(d => d < 0)
     const risingBeforeDrop = diffs.slice(0, -1).every(d => d > 0)
 
+    // Coefficient of variation (stdev / mean). Anything below 5% is just
+    // noise we don't want to label "volatile" — a 1 EGP wiggle on a 999 EGP
+    // mouse is meaningless. Above 5% the swings actually matter.
+    const mean = recentPrices.reduce((a, b) => a + b, 0) / recentPrices.length
+    const variance = recentPrices.reduce((s, p) => s + (p - mean) ** 2, 0) / recentPrices.length
+    const stdev = Math.sqrt(variance)
+    const cv = mean > 0 ? stdev / mean : 0
+
     if (allFalling) {
       parts.push('Price has been falling')
     } else if (risingBeforeDrop) {
       parts.push('Price was rising before this drop — likely limited time')
-    } else {
+    } else if (cv > 0.05) {
       parts.push('Price is volatile')
+    } else {
+      parts.push('Price has been stable')
     }
   }
 
